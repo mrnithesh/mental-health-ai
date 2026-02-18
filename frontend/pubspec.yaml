@@ -1,0 +1,66 @@
+name: mental_health_ai
+description: AI-powered mental health companion app with voice chat, text chat, journaling, and mood tracking.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  
+  # Authentication
+  google_sign_in: ^6.2.1
+  
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # Networking
+  dio: ^5.4.0
+  # web_socket_channel: ^2.4.0  # Phase 2: Voice chat
+  
+  # Audio Recording - Phase 2: Voice chat
+  # record: ^5.1.2
+  # audioplayers: ^6.0.0
+  
+  # UI Components
+  fl_chart: ^0.66.0
+  intl: ^0.18.1
+  
+  # Utilities
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.2
+  uuid: ^4.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  riverpod_generator: ^2.3.9
+  build_runner: ^2.4.8
+
+flutter:
+  uses-material-design: true
+  
+  # Uncomment these when you add assets
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/
+
+  # fonts:
+  #   - family: Poppins
+  #     fonts:
+  #       - asset: assets/fonts/Poppins-Regular.ttf
+  #       - asset: assets/fonts/Poppins-Medium.ttf
+  #         weight: 500
+  #       - asset: assets/fonts/Poppins-SemiBold.ttf
+  #         weight: 600
+  #       - asset: assets/fonts/Poppins-Bold.ttf
+  #         weight: 700
