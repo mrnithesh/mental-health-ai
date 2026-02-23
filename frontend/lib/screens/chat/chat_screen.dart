@@ -35,7 +35,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       vsync: this,
     )..repeat(reverse: true);
 
-    // Initialize chat session and add welcome message
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final geminiService = ref.read(geminiServiceProvider);
       _chatSession = geminiService.startChat();
@@ -43,7 +42,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     _messages.add(_ChatMessage(
       text:
-          "Hi! I'm MindfulAI, your mental health companion. I'm here to listen and support you. How are you feeling today?",
+          "Hey! I'm MindfulAI, your mental health buddy. I'm here to listen and support you—no judgment. How are you feeling today?",
       isUser: false,
       timestamp: DateTime.now(),
     ));
@@ -103,6 +102,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _messages.add(aiMessage);
       });
 
+      final aiMessageIndex = _messages.length - 1;
       final responseStream = _chatSession!.sendMessageStream(
         Content.text(text),
       );
@@ -112,12 +112,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (chunkText != null && chunkText.isNotEmpty) {
           setState(() {
             _isTyping = false;
-            final idx = _messages.indexOf(aiMessage);
-            if (idx != -1) {
-              _messages[idx] = _ChatMessage(
-                text: _messages[idx].text + chunkText,
+            if (aiMessageIndex < _messages.length) {
+              _messages[aiMessageIndex] = _ChatMessage(
+                text: _messages[aiMessageIndex].text + chunkText,
                 isUser: false,
-                timestamp: aiMessage.timestamp,
+                timestamp: _messages[aiMessageIndex].timestamp,
               );
             }
           });
@@ -133,7 +132,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           _messages.removeAt(idx);
         }
         _messages.add(_ChatMessage(
-          text: 'Error: ${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled in your Firebase Console.',
+          text:
+              'Error: ${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled in your Firebase Console.',
           isUser: false,
           timestamp: DateTime.now(),
           isError: true,
@@ -162,26 +162,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.secondary.withOpacity(0.05),
-              AppColors.background,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              Expanded(child: _buildMessagesList()),
-              if (_isTyping) _buildTypingIndicator(),
-              _buildInputArea(),
-            ],
-          ),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(),
+            Expanded(child: _buildMessagesList()),
+            if (_isTyping) _buildTypingIndicator(),
+            _buildInputArea(),
+          ],
         ),
       ),
     );
@@ -189,36 +178,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Widget _buildAppBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.surfaceVariant, width: 1),
+        ),
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
+          const SizedBox(width: 8),
           Container(
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [AppColors.secondary, AppColors.secondaryLight],
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: const Icon(
-              Icons.psychology,
+              Icons.auto_awesome_rounded,
               color: Colors.white,
-              size: 24,
+              size: 20,
             ),
           ),
           const SizedBox(width: 12),
@@ -226,18 +208,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'MindfulAI',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
                 Row(
                   children: [
                     Container(
-                      width: 8,
-                      height: 8,
+                      width: 7,
+                      height: 7,
                       decoration: const BoxDecoration(
                         color: AppColors.success,
                         shape: BoxShape.circle,
@@ -246,10 +225,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     const SizedBox(width: 4),
                     Text(
                       'Powered by Gemini',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.textTertiary,
+                          ),
                     ),
                   ],
                 ),
@@ -285,8 +263,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [AppColors.secondary, AppColors.secondaryLight],
@@ -294,23 +272,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
-              Icons.psychology,
+              Icons.auto_awesome_rounded,
               color: Colors.white,
-              size: 18,
+              size: 16,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                ),
-              ],
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.surfaceVariant),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -330,16 +303,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(color: AppColors.surfaceVariant, width: 1),
+        ),
       ),
       child: Row(
         children: [
@@ -347,13 +316,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             child: Container(
               decoration: BoxDecoration(
                 color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
               child: TextField(
                 controller: _messageController,
                 decoration: const InputDecoration(
                   hintText: 'Type your message...',
+                  hintStyle: TextStyle(color: AppColors.textTertiary),
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 12,
@@ -364,18 +336,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Container(
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [AppColors.secondary, AppColors.secondaryLight],
+                colors: [AppColors.primary, AppColors.primaryLight],
               ),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(AppRadius.xl),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.secondary.withOpacity(0.3),
+                  color: AppColors.primary.withOpacity(0.3),
                   blurRadius: 8,
-                  offset: const Offset(0, 4),
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -383,9 +355,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               color: Colors.transparent,
               child: InkWell(
                 onTap: _sendMessage,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(AppRadius.xl),
                 child: const Padding(
-                  padding: EdgeInsets.all(14),
+                  padding: EdgeInsets.all(12),
                   child: Icon(
                     Icons.send_rounded,
                     color: Colors.white,
@@ -428,7 +400,7 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        bottom: 12,
+        bottom: 10,
         left: message.isUser ? 48 : 0,
         right: message.isUser ? 0 : 48,
       ),
@@ -439,8 +411,8 @@ class _MessageBubble extends StatelessWidget {
         children: [
           if (!message.isUser && showAvatar)
             Container(
-              width: 32,
-              height: 32,
+              width: 30,
+              height: 30,
               margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
@@ -449,16 +421,16 @@ class _MessageBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.psychology,
+                Icons.auto_awesome_rounded,
                 color: Colors.white,
-                size: 18,
+                size: 16,
               ),
             )
           else if (!message.isUser)
-            const SizedBox(width: 40),
+            const SizedBox(width: 38),
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
               decoration: BoxDecoration(
                 gradient: message.isUser
                     ? const LinearGradient(
@@ -468,21 +440,21 @@ class _MessageBubble extends StatelessWidget {
                 color: message.isUser
                     ? null
                     : message.isError
-                        ? AppColors.error.withOpacity(0.1)
-                        : Colors.white,
+                        ? AppColors.error.withOpacity(0.08)
+                        : AppColors.surface,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(20),
                   topRight: const Radius.circular(20),
                   bottomLeft: Radius.circular(message.isUser ? 20 : 4),
                   bottomRight: Radius.circular(message.isUser ? 4 : 20),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                border: message.isUser
+                    ? null
+                    : Border.all(
+                        color: message.isError
+                            ? AppColors.error.withOpacity(0.2)
+                            : AppColors.surfaceVariant,
+                      ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,13 +462,13 @@ class _MessageBubble extends StatelessWidget {
                   Text(
                     message.text,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       color: message.isUser
                           ? Colors.white
                           : message.isError
                               ? AppColors.error
                               : AppColors.textPrimary,
-                      height: 1.4,
+                      height: 1.45,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -515,23 +487,23 @@ class _MessageBubble extends StatelessWidget {
           ),
           if (message.isUser && showAvatar)
             Container(
-              width: 32,
-              height: 32,
+              width: 30,
+              height: 30,
               margin: const EdgeInsets.only(left: 8),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryLight],
+                  colors: [AppColors.primaryDark, AppColors.primary],
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.person,
+                Icons.person_rounded,
                 color: Colors.white,
-                size: 18,
+                size: 16,
               ),
             )
           else if (message.isUser)
-            const SizedBox(width: 40),
+            const SizedBox(width: 38),
         ],
       ),
     );
@@ -560,8 +532,8 @@ class _TypingDot extends StatelessWidget {
             0.3 + (0.7 * (value < 0.5 ? value * 2 : (1 - value) * 2));
 
         return Container(
-          width: 8,
-          height: 8,
+          width: 7,
+          height: 7,
           decoration: BoxDecoration(
             color: AppColors.secondary.withOpacity(opacity),
             shape: BoxShape.circle,

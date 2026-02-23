@@ -32,40 +32,56 @@ class _MoodTrackerScreenState extends ConsumerState<MoodTrackerScreen> {
     final success = await ref.read(moodTrackerProvider.notifier).save();
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mood saved!')),
+        SnackBar(
+          content: const Text('Mood saved!'),
+          backgroundColor: AppColors.secondary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+        ),
       );
-      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final moodState = ref.watch(moodTrackerProvider);
+    final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('How are you feeling?'),
-      ),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Text('How are you\nfeeling?',
+                  style: tt.headlineLarge, textAlign: TextAlign.center),
+              const SizedBox(height: 32),
+
               // Emoji display
               Center(
-                child: Text(
-                  moodState.emoji,
-                  style: const TextStyle(fontSize: 80),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return ScaleTransition(scale: animation, child: child);
+                  },
+                  child: Text(
+                    moodState.emoji,
+                    key: ValueKey(moodState.selectedScore),
+                    style: const TextStyle(fontSize: 72),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               Center(
-                child: Text(
-                  moodState.label,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Text(
+                    moodState.label,
+                    key: ValueKey(moodState.label),
+                    style: tt.titleLarge?.copyWith(color: AppColors.textSecondary),
                   ),
                 ),
               ),
@@ -78,46 +94,61 @@ class _MoodTrackerScreenState extends ConsumerState<MoodTrackerScreen> {
                   ref.read(moodTrackerProvider.notifier).setScore(score);
                 },
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
               // Note input
-              TextField(
-                controller: _noteController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'Add a note (optional)',
-                  prefixIcon: const Icon(Icons.note_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: AppColors.surfaceVariant),
                 ),
-                onChanged: (value) {
-                  ref.read(moodTrackerProvider.notifier).setNote(value);
-                },
+                child: TextField(
+                  controller: _noteController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Add a note (optional)',
+                    hintStyle: TextStyle(color: AppColors.textTertiary),
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.only(left: 12, bottom: 40),
+                      child: Icon(Icons.edit_note_rounded,
+                          color: AppColors.textTertiary, size: 20),
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(14),
+                  ),
+                  onChanged: (value) {
+                    ref.read(moodTrackerProvider.notifier).setNote(value);
+                  },
+                ),
               ),
-              const SizedBox(height: 16),
 
-              // Error display
-              if (moodState.error != null)
+              if (moodState.error != null) ...[
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.error.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                   child: Text(
                     moodState.error!,
-                    style: const TextStyle(color: AppColors.error),
+                    style: const TextStyle(color: AppColors.error, fontSize: 12),
                   ),
                 ),
+              ],
 
               const Spacer(),
 
-              // Save button
               ElevatedButton(
                 onPressed: moodState.isSaving ? null : _saveMood,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
                 ),
                 child: moodState.isSaving
                     ? const SizedBox(
@@ -165,35 +196,48 @@ class _MoodSelector extends StatelessWidget {
 
         return GestureDetector(
           onTap: () => onScoreChanged(score),
-          child: AnimatedContainer(
+          child: AnimatedScale(
+            scale: isSelected ? 1.1 : 1.0,
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSelected ? color.withOpacity(0.2) : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isSelected ? color : Colors.transparent,
-                width: 2,
+            curve: Curves.easeOutBack,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isSelected ? color.withOpacity(0.15) : AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: isSelected ? color : AppColors.surfaceVariant,
+                  width: isSelected ? 2 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: color.withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : [],
               ),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  emoji,
-                  style: TextStyle(
-                    fontSize: isSelected ? 36 : 28,
+              child: Column(
+                children: [
+                  Text(
+                    emoji,
+                    style: TextStyle(fontSize: isSelected ? 34 : 26),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isSelected ? color : AppColors.textSecondary,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isSelected ? color : AppColors.textTertiary,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

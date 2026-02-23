@@ -6,6 +6,7 @@ import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../models/journal_model.dart';
 import '../../providers/journal_provider.dart';
+import '../../widgets/animated_list_item.dart';
 
 class JournalListScreen extends ConsumerWidget {
   const JournalListScreen({super.key});
@@ -13,47 +14,92 @@ class JournalListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final journalsAsync = ref.watch(journalsProvider);
+    final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Journal'),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, AppRoutes.journalEditor);
-        },
-        child: const Icon(Icons.add),
-      ),
-      body: journalsAsync.when(
-        data: (journals) {
-          if (journals.isEmpty) {
-            return _EmptyState();
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: journals.length,
-            itemBuilder: (context, index) {
-              final journal = journals[index];
-              return _JournalCard(journal: journal);
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              const SizedBox(height: 16),
-              Text('Failed to load journals: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.refresh(journalsProvider),
-                child: const Text('Retry'),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Journal', style: tt.headlineMedium),
+                  ),
+                  _AddButton(
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.journalEditor),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: journalsAsync.when(
+                data: (journals) {
+                  if (journals.isEmpty) return const _EmptyState();
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                    itemCount: journals.length,
+                    itemBuilder: (context, index) {
+                      return AnimatedListItem(
+                        index: index,
+                        child: _JournalCard(journal: journals[index]),
+                      );
+                    },
+                  );
+                },
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (error, _) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline_rounded,
+                          size: 48, color: AppColors.error),
+                      const SizedBox(height: 16),
+                      Text('Failed to load journals',
+                          style: tt.titleSmall),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: () => ref.refresh(journalsProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AddButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        child: const Icon(
+          Icons.add_rounded,
+          color: AppColors.primary,
+          size: 22,
         ),
       ),
     );
@@ -61,6 +107,8 @@ class JournalListScreen extends ConsumerWidget {
 }
 
 class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -72,38 +120,32 @@ class _EmptyState extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.1),
+                color: AppColors.accent.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.book_outlined,
+                Icons.edit_note_rounded,
                 size: 48,
-                color: AppColors.warning,
+                color: AppColors.accent,
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Start Journaling',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text('Start Journaling',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             Text(
-              'Write down your thoughts and feelings. Journaling can help you process emotions and track your mental wellness.',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-              ),
+              'Write down your thoughts and feelings to process emotions and track your mental wellness.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.journalEditor);
-              },
-              icon: const Icon(Icons.add),
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.journalEditor),
+              icon: const Icon(Icons.add_rounded, size: 20),
               label: const Text('Write First Entry'),
             ),
           ],
@@ -115,141 +157,116 @@ class _EmptyState extends StatelessWidget {
 
 class _JournalCard extends StatelessWidget {
   final JournalModel journal;
-
   const _JournalCard({required this.journal});
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = DateFormat('MMM d');
     final timeFormat = DateFormat('h:mm a');
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () {
-          Navigator.pushNamed(
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(
             context,
             AppRoutes.journalEditor,
             arguments: journal.id,
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Date and time
-              Row(
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.surfaceVariant),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
                 children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    dateFormat.format(journal.createdAt),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                  // Colored accent bar
+                  Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      color: journal.aiInsight != null
+                          ? AppColors.secondary
+                          : AppColors.primary,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(AppRadius.md),
+                        bottomLeft: Radius.circular(AppRadius.md),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Icon(
-                    Icons.access_time,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    timeFormat.format(journal.createdAt),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (journal.aiInsight != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                  // Content
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.auto_awesome,
-                            size: 12,
-                            color: AppColors.primary,
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today_rounded,
+                                  size: 13, color: AppColors.textTertiary),
+                              const SizedBox(width: 4),
+                              Text(
+                                dateFormat.format(journal.createdAt),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textTertiary),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                timeFormat.format(journal.createdAt),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textTertiary),
+                              ),
+                              const Spacer(),
+                              if (journal.aiInsight != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        AppColors.secondary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.auto_awesome_rounded,
+                                          size: 11,
+                                          color: AppColors.secondary),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Insight',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.secondary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(height: 10),
                           Text(
-                            'AI Insight',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            journal.preview,
+                            style: const TextStyle(
+                                fontSize: 14, height: 1.45),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // Content preview
-              Text(
-                journal.preview,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              // AI insight preview
-              if (journal.aiInsight != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.psychology,
-                        size: 16,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          journal.aiInsight!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontStyle: FontStyle.italic,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),

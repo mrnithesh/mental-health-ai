@@ -112,9 +112,28 @@ Last updated: 2026-01-28
 }
 ```
 
+## UI Architecture
+
+### Navigation
+- `MainShell` scaffold with persistent bottom nav bar (5 tabs)
+- Tabs: Home | Chat | Voice (center FAB) | Journal | Mood
+- Splash → MainShell (demo mode, anonymous auth)
+- Sub-pages (journal editor, mood history) use fade+slide transitions
+
+### Color Palette (Calm Blue/Green)
+- Primary: `#5B7FBA` (calm blue)
+- Secondary: `#6ABFA3` (therapeutic sage green)
+- Accent: `#F4C065` (warm gold)
+- Background: `#F5F7FA` | Surface: `#FFFFFF` | SurfaceVariant: `#EDF1F7`
+
+### Shared Widgets
+- `GlassCard` — frosted glass container with blur
+- `AnimatedListItem` — staggered fade+slide entrance
+- `AppGradient` — standardized gradient backgrounds
+
 ## Authentication Flow
 
-Currently in **demo mode** (auth bypassed, splash goes directly to home).
+Currently in **demo mode** (auth bypassed, splash goes directly to main shell).
 
 Production flow:
 1. User opens app → Check Firebase Auth state

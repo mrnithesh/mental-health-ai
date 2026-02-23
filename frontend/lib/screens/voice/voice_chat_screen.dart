@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
@@ -10,13 +11,7 @@ import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
 import '../../utils/audio_output.dart';
 
-enum VoiceState {
-  idle,
-  connecting,
-  listening,
-  speaking,
-  error,
-}
+enum VoiceState { idle, connecting, listening, speaking, error }
 
 class VoiceChatScreen extends ConsumerStatefulWidget {
   const VoiceChatScreen({super.key});
@@ -39,7 +34,9 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
   late AnimationController _pulseController;
   late AnimationController _waveController;
+  late AnimationController _breatheController;
   late Animation<double> _pulseAnimation;
+  late Animation<double> _breatheAnimation;
 
   int? _inputTranscriptionIndex;
   int? _outputTranscriptionIndex;
@@ -53,20 +50,30 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       vsync: this,
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.12).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     _waveController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 2500),
       vsync: this,
     )..repeat();
+
+    _breatheController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _breatheAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _breatheController, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _waveController.dispose();
+    _breatheController.dispose();
     _disconnect();
     _recorder.dispose();
     _audioOutput.dispose();
@@ -151,9 +158,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     _recordSubscription = stream.listen(
       (data) {
         if (_session != null) {
-          _session!.sendAudioRealtime(
-            InlineDataPart('audio/pcm', data),
-          );
+          _session!.sendAudioRealtime(InlineDataPart('audio/pcm', data));
         }
       },
       onError: (e) {
@@ -170,11 +175,9 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
         final message = response.message;
 
         if (message is LiveServerContent) {
-          // Play model audio output
           if (message.modelTurn != null) {
             for (final part in message.modelTurn!.parts) {
-              if (part is InlineDataPart &&
-                  part.mimeType.startsWith('audio')) {
+              if (part is InlineDataPart && part.mimeType.startsWith('audio')) {
                 _audioOutput.addData(part.bytes);
                 if (_state != VoiceState.speaking) {
                   setState(() => _state = VoiceState.speaking);
@@ -183,21 +186,12 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
             }
           }
 
-          // Accumulate input transcription (user speech)
           _inputTranscriptionIndex = _handleTranscription(
-            message.inputTranscription,
-            _inputTranscriptionIndex,
-            true,
-          );
+            message.inputTranscription, _inputTranscriptionIndex, true);
 
-          // Accumulate output transcription (AI speech)
           _outputTranscriptionIndex = _handleTranscription(
-            message.outputTranscription,
-            _outputTranscriptionIndex,
-            false,
-          );
+            message.outputTranscription, _outputTranscriptionIndex, false);
 
-          // Turn complete -- AI finished responding
           if (message.turnComplete == true) {
             setState(() => _state = VoiceState.listening);
           }
@@ -218,34 +212,24 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     );
   }
 
-  /// Accumulates transcription chunks into transcript messages,
-  /// following the official FlutterFire example pattern.
   int? _handleTranscription(
-    Transcription? transcription,
-    int? messageIndex,
-    bool isUser,
-  ) {
+      Transcription? transcription, int? messageIndex, bool isUser) {
     if (transcription?.text == null) return messageIndex;
 
     int? currentIndex = messageIndex;
 
     if (currentIndex != null && currentIndex < _transcript.length) {
-      // Append to existing transcript message
       _transcript[currentIndex] = _TranscriptMessage(
         text: _transcript[currentIndex].text + transcription!.text!,
         isUser: isUser,
       );
     } else {
-      // Start a new transcript message
-      _transcript.add(_TranscriptMessage(
-        text: transcription!.text!,
-        isUser: isUser,
-      ));
+      _transcript.add(
+          _TranscriptMessage(text: transcription!.text!, isUser: isUser));
       currentIndex = _transcript.length - 1;
     }
 
     if (transcription.finished ?? false) {
-      // Transcription segment complete — next chunk starts a new message
       currentIndex = null;
     }
 
@@ -259,114 +243,70 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     _recordSubscription?.cancel();
     _recordSubscription = null;
 
-    try {
-      await _recorder.stop();
-    } catch (_) {}
-
-    try {
-      await _audioOutput.stopStream();
-    } catch (_) {}
-
-    try {
-      await _session?.close();
-    } catch (_) {}
+    try { await _audioOutput.stopStream(); } catch (_) {}
+    try { await _recorder.stop(); } catch (_) {}
+    try { await _session?.close(); } catch (_) {}
     _session = null;
 
     _inputTranscriptionIndex = null;
     _outputTranscriptionIndex = null;
 
-    if (mounted) {
-      setState(() => _state = VoiceState.idle);
-    }
+    if (mounted) setState(() => _state = VoiceState.idle);
   }
 
   String get _statusText {
     switch (_state) {
-      case VoiceState.idle:
-        return 'Tap to start';
-      case VoiceState.connecting:
-        return 'Connecting...';
-      case VoiceState.listening:
-        return 'Listening...';
-      case VoiceState.speaking:
-        return 'AI is speaking...';
-      case VoiceState.error:
-        return 'Error occurred';
+      case VoiceState.idle: return 'Tap to start';
+      case VoiceState.connecting: return 'Connecting...';
+      case VoiceState.listening: return 'Listening...';
+      case VoiceState.speaking: return 'AI is speaking...';
+      case VoiceState.error: return 'Error occurred';
     }
   }
 
   Color get _statusColor {
     switch (_state) {
-      case VoiceState.idle:
-        return AppColors.textSecondary;
-      case VoiceState.connecting:
-        return AppColors.warning;
-      case VoiceState.listening:
-        return AppColors.error;
-      case VoiceState.speaking:
-        return AppColors.success;
-      case VoiceState.error:
-        return AppColors.error;
+      case VoiceState.idle: return AppColors.textSecondary;
+      case VoiceState.connecting: return AppColors.accent;
+      case VoiceState.listening: return AppColors.primary;
+      case VoiceState.speaking: return AppColors.secondary;
+      case VoiceState.error: return AppColors.error;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppColors.primary.withOpacity(0.1),
+              AppColors.primary.withOpacity(0.06),
               AppColors.background,
-              AppColors.secondary.withOpacity(0.05),
+              AppColors.secondary.withOpacity(0.03),
             ],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () {
-                        _disconnect();
-                        Navigator.pop(context);
-                      },
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Voice Chat',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-              ),
+              _buildHeader(),
               Expanded(
                 child: Column(
                   children: [
                     const Spacer(flex: 1),
                     _buildMicrophoneButton(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: Text(
                         _statusText,
                         key: ValueKey(_state),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.w500,
                           color: _statusColor,
                         ),
@@ -379,9 +319,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                         child: Text(
                           _errorMessage!,
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.error,
-                          ),
+                              fontSize: 11, color: AppColors.error),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -398,96 +336,146 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     );
   }
 
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const SizedBox(width: 48),
+          Expanded(
+            child: Text(
+              'Voice Chat',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 48),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMicrophoneButton() {
     final isActive =
         _state == VoiceState.listening || _state == VoiceState.speaking;
+    final isIdle = _state == VoiceState.idle || _state == VoiceState.error;
 
     return GestureDetector(
       onTap: _onMicTap,
-      child: AnimatedBuilder(
-        animation: _pulseController,
-        builder: (context, child) {
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              if (isActive) ...[
-                _buildWaveCircle(180, 0.1, 0),
-                _buildWaveCircle(160, 0.15, 0.2),
-                _buildWaveCircle(140, 0.2, 0.4),
-              ],
-              Transform.scale(
-                scale: isActive ? _pulseAnimation.value : 1.0,
+      child: SizedBox(
+        width: 200,
+        height: 200,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Wave circles when active
+            if (isActive) ...[
+              _buildWaveCircle(180, 0.08, 0),
+              _buildWaveCircle(160, 0.12, 0.25),
+              _buildWaveCircle(140, 0.15, 0.5),
+            ],
+
+            // Breathing ring when idle
+            if (isIdle)
+              AnimatedBuilder(
+                animation: _breatheController,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _breatheAnimation.value,
+                    child: Container(
+                      width: 130,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.primary.withOpacity(0.15),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+            // Glow behind button
+            if (isActive)
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: (_state == VoiceState.listening
+                                ? AppColors.primary
+                                : AppColors.secondary)
+                            .withOpacity(0.15),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+            // Frosted glass mic button
+            ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
-                  width: 120,
-                  height: 120,
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _state == VoiceState.listening
-                        ? AppColors.error.withOpacity(0.2)
-                        : _state == VoiceState.speaking
-                            ? AppColors.success.withOpacity(0.2)
-                            : AppColors.primary.withOpacity(0.1),
-                  ),
-                ),
-              ),
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: _state == VoiceState.listening
-                        ? [AppColors.error, AppColors.error.withOpacity(0.8)]
-                        : _state == VoiceState.speaking
-                            ? [
-                                AppColors.success,
-                                AppColors.success.withOpacity(0.8)
-                              ]
-                            : _state == VoiceState.connecting
-                                ? [
-                                    AppColors.warning,
-                                    AppColors.warning.withOpacity(0.8)
-                                  ]
-                                : [AppColors.primary, AppColors.primaryLight],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (_state == VoiceState.listening
-                              ? AppColors.error
-                              : _state == VoiceState.speaking
-                                  ? AppColors.success
-                                  : AppColors.primary)
-                          .withOpacity(0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: _state == VoiceState.listening
+                          ? [AppColors.primary, AppColors.primaryDark]
+                          : _state == VoiceState.speaking
+                              ? [AppColors.secondary, AppColors.secondaryDark]
+                              : _state == VoiceState.connecting
+                                  ? [AppColors.accent, AppColors.accentLight]
+                                  : [AppColors.primary, AppColors.primaryLight],
                     ),
-                  ],
-                ),
-                child: _state == VoiceState.connecting
-                    ? const Padding(
-                        padding: EdgeInsets.all(30),
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 3,
-                        ),
-                      )
-                    : Icon(
-                        _state == VoiceState.listening
-                            ? Icons.mic
-                            : _state == VoiceState.speaking
-                                ? Icons.volume_up
-                                : _state == VoiceState.error
-                                    ? Icons.refresh
-                                    : Icons.mic_none,
-                        color: Colors.white,
-                        size: 40,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_state == VoiceState.listening
+                                ? AppColors.primary
+                                : _state == VoiceState.speaking
+                                    ? AppColors.secondary
+                                    : AppColors.primary)
+                            .withOpacity(0.35),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
                       ),
+                    ],
+                  ),
+                  child: _state == VoiceState.connecting
+                      ? const Padding(
+                          padding: EdgeInsets.all(28),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : Icon(
+                          _state == VoiceState.listening
+                              ? Icons.mic_rounded
+                              : _state == VoiceState.speaking
+                                  ? Icons.volume_up_rounded
+                                  : _state == VoiceState.error
+                                      ? Icons.refresh_rounded
+                                      : Icons.mic_none_rounded,
+                          color: Colors.white,
+                          size: 36,
+                        ),
+                ),
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -497,7 +485,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       animation: _waveController,
       builder: (context, child) {
         final value = ((_waveController.value + delay) % 1.0);
-        final scale = 1.0 + (value * 0.3);
+        final scale = 1.0 + (value * 0.25);
         final alpha = (1.0 - value) * opacity;
 
         return Transform.scale(
@@ -509,10 +497,10 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
               shape: BoxShape.circle,
               border: Border.all(
                 color: (_state == VoiceState.listening
-                        ? AppColors.error
-                        : AppColors.success)
+                        ? AppColors.primary
+                        : AppColors.secondary)
                     .withOpacity(alpha),
-                width: 2,
+                width: 1.5,
               ),
             ),
           ),
@@ -524,38 +512,32 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   Widget _buildTranscriptArea() {
     return Container(
       height: 200,
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.surfaceVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.history,
-                  size: 18, color: AppColors.textSecondary),
-              const SizedBox(width: 8),
+              Icon(Icons.subtitles_outlined,
+                  size: 16, color: AppColors.textTertiary),
+              const SizedBox(width: 6),
               Text(
                 'Conversation',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textTertiary,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Expanded(
             child: _transcript.isEmpty
                 ? Center(
@@ -563,7 +545,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                       'Tap the microphone to start talking',
                       style: TextStyle(
                         color: AppColors.textTertiary,
-                        fontSize: 14,
+                        fontSize: 13,
                       ),
                     ),
                   )
@@ -586,13 +568,11 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 class _TranscriptMessage {
   final String text;
   final bool isUser;
-
   _TranscriptMessage({required this.text, required this.isUser});
 }
 
 class _TranscriptBubble extends StatelessWidget {
   final _TranscriptMessage message;
-
   const _TranscriptBubble({required this.message});
 
   @override
@@ -603,8 +583,8 @@ class _TranscriptBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 24,
-            height: 24,
+            width: 22,
+            height: 22,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: message.isUser
@@ -612,10 +592,9 @@ class _TranscriptBubble extends StatelessWidget {
                   : AppColors.secondary.withOpacity(0.1),
             ),
             child: Icon(
-              message.isUser ? Icons.person : Icons.psychology,
-              size: 14,
-              color:
-                  message.isUser ? AppColors.primary : AppColors.secondary,
+              message.isUser ? Icons.person_rounded : Icons.auto_awesome_rounded,
+              size: 12,
+              color: message.isUser ? AppColors.primary : AppColors.secondary,
             ),
           ),
           const SizedBox(width: 8),
@@ -626,15 +605,19 @@ class _TranscriptBubble extends StatelessWidget {
                 Text(
                   message.isUser ? 'You' : 'MindfulAI',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: AppColors.textTertiary,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   message.text,
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ],
             ),
