@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/routes.dart';
 import '../../config/theme.dart';
-import '../../providers/auth_provider.dart';
+// Demo mode: auth provider commented out
+// import '../../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -50,24 +51,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     
     if (!mounted) return;
 
-    final authState = ref.read(authStateProvider);
+    // Demo mode: skip auth, go directly to home
+    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     
-    authState.when(
-      data: (user) {
-        if (user != null) {
-          Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-        } else {
-          Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-        }
-      },
-      loading: () {
-        // Wait and check again
-        Future.delayed(const Duration(milliseconds: 500), _checkAuthState);
-      },
-      error: (_, __) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-      },
-    );
+    // Original auth check (uncomment for production):
+    // final authState = ref.read(authStateProvider);
+    // authState.when(
+    //   data: (user) {
+    //     if (user != null) {
+    //       Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    //     } else {
+    //       Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+    //     }
+    //   },
+    //   loading: () {
+    //     Future.delayed(const Duration(milliseconds: 500), _checkAuthState);
+    //   },
+    //   error: (_, __) {
+    //     Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+    //   },
+    // );
   }
 
   @override

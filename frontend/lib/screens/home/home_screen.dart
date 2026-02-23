@@ -1,38 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/routes.dart';
 import '../../config/theme.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/mood_provider.dart';
 
-class HomeScreen extends ConsumerStatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  @override
   Widget build(BuildContext context) {
-    final userModel = ref.watch(userModelProvider);
-    final todaysMood = ref.watch(todaysMoodProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('MindfulAI'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await ref.read(authNotifierProvider.notifier).signOut();
-              if (mounted) {
-                Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-              }
-            },
-          ),
-        ],
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -41,27 +20,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Greeting
-              userModel.when(
-                data: (user) => Text(
-                  'Hello, ${user?.displayName?.split(' ').first ?? 'there'}!',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                loading: () => const Text(
-                  'Hello!',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                error: (_, __) => const Text(
-                  'Hello!',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+              const Text(
+                'Hello, Friend!',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 4),
@@ -74,8 +37,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Today's mood card
-              _MoodCheckCard(todaysMood: todaysMood),
+              // Mood check card
+              _MoodCheckCard(
+                onTap: () => Navigator.pushNamed(context, AppRoutes.moodTracker),
+              ),
               const SizedBox(height: 24),
 
               // Quick actions
@@ -181,9 +146,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 }
 
 class _MoodCheckCard extends StatelessWidget {
-  final AsyncValue todaysMood;
+  final VoidCallback onTap;
 
-  const _MoodCheckCard({required this.todaysMood});
+  const _MoodCheckCard({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -204,102 +169,51 @@ class _MoodCheckCard extends StatelessWidget {
           ),
         ],
       ),
-      child: todaysMood.when(
-        data: (mood) {
-          if (mood != null) {
-            return Row(
-              children: [
-                Text(
-                  mood.emoji,
-                  style: const TextStyle(fontSize: 48),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Today's Mood",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        mood.label,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, AppRoutes.moodTracker);
-                  },
-                  icon: const Icon(Icons.edit, color: Colors.white),
-                ),
-              ],
-            );
-          }
-          
-          return InkWell(
-            onTap: () => Navigator.pushNamed(context, AppRoutes.moodTracker),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.add_reaction_outlined,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Log Your Mood',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Tap to record how you feel today',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white70,
-                  size: 16,
-                ),
-              ],
+      child: InkWell(
+        onTap: onTap,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.add_reaction_outlined,
+                color: Colors.white,
+                size: 32,
+              ),
             ),
-          );
-        },
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
-        error: (_, __) => const Text(
-          'Unable to load mood',
-          style: TextStyle(color: Colors.white),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Log Your Mood',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Tap to record how you feel today',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white70,
+              size: 16,
+            ),
+          ],
         ),
       ),
     );
