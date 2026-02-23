@@ -1,48 +1,49 @@
 import 'dart:async';
-import 'dart:math';
 
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/theme.dart';
+import '../../providers/service_providers.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String? conversationId;
 
   const ChatScreen({super.key, this.conversationId});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
-  
-  late AnimationController _typingController;
+  ChatSession? _chatSession;
 
-  final List<String> _aiResponses = [
-    "I understand how you feel. It's important to acknowledge these emotions rather than push them away. Would you like to explore what might be causing these feelings?",
-    "Thank you for sharing that with me. Remember, every small step forward counts. What's one thing you could do today that might help you feel a bit better?",
-    "That's a really insightful observation about yourself. Self-awareness is such an important part of mental wellness. How long have you been noticing this pattern?",
-    "It sounds like you're going through a challenging time. I'm here to listen and support you. Sometimes just expressing our thoughts can help lighten the emotional load.",
-    "I hear you. It's completely normal to feel this way sometimes. Would you like to try a quick mindfulness exercise together?",
-    "Your feelings are valid. Many people experience similar emotions. What usually helps you feel more grounded when you're feeling this way?",
-  ];
+  late AnimationController _typingController;
 
   @override
   void initState() {
     super.initState();
-    
+
     _typingController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     )..repeat(reverse: true);
-    
-    // Add initial AI message
+
+    // Initialize chat session and add welcome message
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final geminiService = ref.read(geminiServiceProvider);
+      _chatSession = geminiService.startChat();
+    });
+
     _messages.add(_ChatMessage(
-      text: "Hi! I'm your MindfulAI companion. I'm here to listen, support, and help you navigate your thoughts and feelings. How are you doing today?",
+      text:
+          "Hi! I'm MindfulAI, your mental health companion. I'm here to listen and support you. How are you feeling today?",
       isUser: false,
       timestamp: DateTime.now(),
     ));
@@ -56,9 +57,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
+
+    if (_chatSession == null) {
+      debugPrint('Chat session is null — reinitializing');
+      try {
+        final geminiService = ref.read(geminiServiceProvider);
+        _chatSession = geminiService.startChat();
+      } catch (e) {
+        debugPrint('Failed to init chat session: $e');
+        setState(() {
+          _messages.add(_ChatMessage(
+            text: 'Failed to initialize Gemini: ${e.toString()}',
+            isUser: false,
+            timestamp: DateTime.now(),
+            isError: true,
+          ));
+        });
+        return;
+      }
+    }
 
     setState(() {
       _messages.add(_ChatMessage(
@@ -72,21 +92,59 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     _scrollToBottom();
 
-    // Simulate AI response after a delay
-    Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) {
-        setState(() {
-          _isTyping = false;
-          final random = Random();
-          _messages.add(_ChatMessage(
-            text: _aiResponses[random.nextInt(_aiResponses.length)],
-            isUser: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-        _scrollToBottom();
+    try {
+      final aiMessage = _ChatMessage(
+        text: '',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
+
+      setState(() {
+        _messages.add(aiMessage);
+      });
+
+      final responseStream = _chatSession!.sendMessageStream(
+        Content.text(text),
+      );
+
+      await for (final chunk in responseStream) {
+        final chunkText = chunk.text;
+        if (chunkText != null && chunkText.isNotEmpty) {
+          setState(() {
+            _isTyping = false;
+            final idx = _messages.indexOf(aiMessage);
+            if (idx != -1) {
+              _messages[idx] = _ChatMessage(
+                text: _messages[idx].text + chunkText,
+                isUser: false,
+                timestamp: aiMessage.timestamp,
+              );
+            }
+          });
+          _scrollToBottom();
+        }
       }
+    } catch (e) {
+      debugPrint('Chat error: $e');
+      setState(() {
+        _isTyping = false;
+        final idx = _messages.lastIndexWhere((m) => !m.isUser && m.text.isEmpty);
+        if (idx != -1) {
+          _messages.removeAt(idx);
+        }
+        _messages.add(_ChatMessage(
+          text: 'Error: ${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled in your Firebase Console.',
+          isUser: false,
+          timestamp: DateTime.now(),
+          isError: true,
+        ));
+      });
+    }
+
+    setState(() {
+      _isTyping = false;
     });
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -118,18 +176,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         child: SafeArea(
           child: Column(
             children: [
-              // Custom app bar
               _buildAppBar(),
-              
-              // Messages list
-              Expanded(
-                child: _buildMessagesList(),
-              ),
-              
-              // Typing indicator
+              Expanded(child: _buildMessagesList()),
               if (_isTyping) _buildTypingIndicator(),
-              
-              // Input area
               _buildInputArea(),
             ],
           ),
@@ -196,7 +245,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Online',
+                      'Powered by Gemini',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -206,10 +255,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {},
           ),
         ],
       ),
@@ -223,9 +268,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       itemCount: _messages.length,
       itemBuilder: (context, index) {
         final message = _messages[index];
-        final showAvatar = index == 0 ||
-            _messages[index - 1].isUser != message.isUser;
-        
+        final showAvatar =
+            index == 0 || _messages[index - 1].isUser != message.isUser;
+
         return _MessageBubble(
           message: message,
           showAvatar: showAvatar,
@@ -360,11 +405,13 @@ class _ChatMessage {
   final String text;
   final bool isUser;
   final DateTime timestamp;
+  final bool isError;
 
   _ChatMessage({
     required this.text,
     required this.isUser,
     required this.timestamp,
+    this.isError = false,
   });
 }
 
@@ -409,7 +456,6 @@ class _MessageBubble extends StatelessWidget {
             )
           else if (!message.isUser)
             const SizedBox(width: 40),
-          
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -419,7 +465,11 @@ class _MessageBubble extends StatelessWidget {
                         colors: [AppColors.primary, AppColors.primaryLight],
                       )
                     : null,
-                color: message.isUser ? null : Colors.white,
+                color: message.isUser
+                    ? null
+                    : message.isError
+                        ? AppColors.error.withOpacity(0.1)
+                        : Colors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(20),
                   topRight: const Radius.circular(20),
@@ -441,7 +491,11 @@ class _MessageBubble extends StatelessWidget {
                     message.text,
                     style: TextStyle(
                       fontSize: 15,
-                      color: message.isUser ? Colors.white : AppColors.textPrimary,
+                      color: message.isUser
+                          ? Colors.white
+                          : message.isError
+                              ? AppColors.error
+                              : AppColors.textPrimary,
                       height: 1.4,
                     ),
                   ),
@@ -459,7 +513,6 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          
           if (message.isUser && showAvatar)
             Container(
               width: 32,
@@ -503,8 +556,9 @@ class _TypingDot extends StatelessWidget {
       animation: controller,
       builder: (context, child) {
         final value = ((controller.value + delay) % 1.0);
-        final opacity = 0.3 + (0.7 * (value < 0.5 ? value * 2 : (1 - value) * 2));
-        
+        final opacity =
+            0.3 + (0.7 * (value < 0.5 ? value * 2 : (1 - value) * 2));
+
         return Container(
           width: 8,
           height: 8,

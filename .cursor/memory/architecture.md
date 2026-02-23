@@ -17,25 +17,47 @@ Last updated: 2026-01-28
 │  └────┬────────────┬────────────┬────────────┬─────┘           │
 │       │            │            │            │                  │
 │  ┌────┴────┐  ┌────┴────┐  ┌────┴────┐  ┌────┴────┐           │
-│  │Firebase │  │   API   │  │ Gemini  │  │Firestore│           │
-│  │Auth Svc │  │ Service │  │Live Svc │  │ Service │           │
+│  │Firebase │  │ Gemini  │  │ Gemini  │  │Firestore│           │
+│  │Auth Svc │  │Chat Svc │  │Live Svc │  │ Service │           │
 │  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘           │
 └───────┼────────────┼────────────┼────────────┼──────────────────┘
         │            │            │            │
-        ▼            ▼            │            ▼
-┌───────────┐  ┌───────────┐     │     ┌───────────┐
-│  Firebase │  │ Cloud Run │     │     │ Firestore │
-│   Auth    │  │  FastAPI  │     │     │    DB     │
-└───────────┘  └─────┬─────┘     │     └───────────┘
-                     │           │
-                     ▼           ▼
+        ▼            ▼            ▼            ▼
+┌───────────┐  ┌─────────────────────┐  ┌───────────┐
+│  Firebase │  │  Firebase AI Logic   │  │ Firestore │
+│   Auth    │  │  (firebase_ai SDK)   │  │    DB     │
+└───────────┘  └─────────┬───────────┘  └───────────┘
+                         │
+                         ▼
               ┌─────────────────────┐
-              │    Gemini APIs      │
-              │  ┌───────┐ ┌─────┐  │
-              │  │ Flash │ │Live │  │
-              │  └───────┘ └─────┘  │
+              │    Gemini Models    │
+              │  ┌───────┐ ┌─────┐ │
+              │  │Flash  │ │Live │ │
+              │  │3-prev │ │2.5  │ │
+              │  └───────┘ └─────┘ │
               └─────────────────────┘
 ```
+
+**Key change**: Chat and voice now connect directly to Gemini via Firebase AI Logic SDK (`firebase_ai` package) -- no backend needed for AI features.
+
+## Gemini Integration (via Firebase AI Logic)
+
+### Text Chat
+- Model: `gemini-2.5-flash`
+- SDK: `firebase_ai` → `FirebaseAI.googleAI(auth: FirebaseAuth.instance).generativeModel()`
+- Multi-turn via `ChatSession.sendMessageStream()`
+- System instruction: MindfulAI mental health companion persona
+- **Important**: Firebase Auth (anonymous) required before using the SDK
+
+### Voice Chat (Gemini Live API)
+- Model: `gemini-2.5-flash-native-audio-preview-12-2025`
+- SDK: `firebase_ai` → `FirebaseAI.googleAI().liveGenerativeModel()`
+- Bidirectional audio via WebSocket: `LiveSession`
+- Mic recording: `record` package (PCM 16-bit, 24kHz, mono, echo cancel, noise suppress)
+- Audio MIME type: `audio/pcm` (no rate suffix)
+- Speech config: `SpeechConfig(voiceName: 'Fenrir')`
+- Transcription: enabled via `AudioTranscriptionConfig`
+- Audio playback: TODO (transcript display working)
 
 ## Firestore Schema
 
@@ -92,44 +114,27 @@ Last updated: 2026-01-28
 
 ## Authentication Flow
 
+Currently in **demo mode** (auth bypassed, splash goes directly to home).
+
+Production flow:
 1. User opens app → Check Firebase Auth state
 2. If not authenticated → Show auth screens
-3. Auth options:
-   - Email/Password: Firebase `createUserWithEmailAndPassword` / `signInWithEmailAndPassword`
-   - Google Sign-in: `google_sign_in` package → Firebase `signInWithCredential`
-   - Phone OTP: Firebase `verifyPhoneNumber` → `signInWithCredential`
+3. Auth options: Email/Password, Google Sign-in, Phone OTP
 4. On successful auth → Create/update user document in Firestore
-5. Get Firebase ID token → Include in `Authorization: Bearer <token>` header for API calls
-6. FastAPI validates token using `firebase-admin` SDK
-
-## API Authentication
-
-All FastAPI endpoints (except health check) require:
-- Header: `Authorization: Bearer <firebase_id_token>`
-- Backend validates token and extracts `uid`
-
-## Gemini Integration
-
-### Text Chat (Gemini Flash)
-- Model: `gemini-2.0-flash-exp`
-- Called via FastAPI backend
-- Maintains conversation context from Firestore history
-
-### Voice Chat (Gemini Live)
-- Model: `gemini-2.0-flash-exp` with Live API
-- Direct WebSocket from Flutter to Gemini
-- Backend only provides ephemeral token generation
 
 ## Dependencies
 
-### Frontend (pubspec.yaml)
-- firebase_core, firebase_auth, cloud_firestore
-- google_sign_in
-- flutter_riverpod
-- dio
-- web_socket_channel
-- record (audio recording)
-- fl_chart
+### Frontend (pubspec.yaml) - FlutterFire BoM 4.9.0
+- firebase_core: ^4.4.0
+- firebase_auth: ^6.1.4
+- cloud_firestore: ^6.1.2
+- firebase_ai: ^3.8.0
+- google_sign_in: ^6.2.1
+- flutter_riverpod: ^2.4.9
+- dio: ^5.4.0
+- record: ^6.0.0
+- permission_handler: ^11.3.0
+- fl_chart, intl, uuid, shared_preferences, path_provider
 
 ### Backend (requirements.txt)
 - fastapi, uvicorn

@@ -1,10 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/routes.dart';
 import '../../config/theme.dart';
+import '../../providers/service_providers.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool? _geminiAvailable;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkGemini());
+  }
+
+  Future<void> _checkGemini() async {
+    try {
+      final gemini = ref.read(geminiServiceProvider);
+      final ok = await gemini.isAvailable();
+      if (mounted) setState(() => _geminiAvailable = ok);
+    } catch (e) {
+      debugPrint('Gemini check error: $e');
+      if (mounted) setState(() => _geminiAvailable = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +45,60 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Greeting
+              if (_geminiAvailable == false)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: AppColors.error, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Gemini API not reachable. Enable Firebase AI Logic in your Firebase Console, then restart.',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.error),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh, size: 18),
+                        onPressed: () {
+                          setState(() => _geminiAvailable = null);
+                          _checkGemini();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              if (_geminiAvailable == true)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle,
+                          color: AppColors.success, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Gemini connected',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.success),
+                      ),
+                    ],
+                  ),
+                ),
               const Text(
                 'Hello, Friend!',
                 style: TextStyle(

@@ -1,56 +1,62 @@
 import 'dart:async';
-import 'dart:math';
 
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 
 import '../../config/theme.dart';
+import '../../providers/service_providers.dart';
+import '../../utils/audio_output.dart';
 
 enum VoiceState {
   idle,
+  connecting,
   listening,
-  thinking,
   speaking,
+  error,
 }
 
-class VoiceChatScreen extends StatefulWidget {
+class VoiceChatScreen extends ConsumerStatefulWidget {
   const VoiceChatScreen({super.key});
 
   @override
-  State<VoiceChatScreen> createState() => _VoiceChatScreenState();
+  ConsumerState<VoiceChatScreen> createState() => _VoiceChatScreenState();
 }
 
-class _VoiceChatScreenState extends State<VoiceChatScreen>
+class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     with TickerProviderStateMixin {
   VoiceState _state = VoiceState.idle;
   final List<_TranscriptMessage> _transcript = [];
-  
+  String? _errorMessage;
+
+  LiveSession? _session;
+  final AudioRecorder _recorder = AudioRecorder();
+  final AudioOutput _audioOutput = AudioOutput();
+  StreamSubscription? _receiveSubscription;
+  StreamSubscription? _recordSubscription;
+
   late AnimationController _pulseController;
   late AnimationController _waveController;
   late Animation<double> _pulseAnimation;
-  
-  Timer? _stateTimer;
 
-  final List<String> _aiResponses = [
-    "I hear you, and it's completely valid to feel that way. Remember, it's okay to take things one step at a time.",
-    "Thank you for sharing that with me. Taking a moment to acknowledge your feelings is an important step.",
-    "That sounds challenging. Would you like to try a quick breathing exercise together?",
-    "I'm here for you. Sometimes just talking about how we feel can help lighten the load.",
-    "It takes courage to open up. I appreciate you trusting me with your thoughts.",
-  ];
+  int? _inputTranscriptionIndex;
+  int? _outputTranscriptionIndex;
 
   @override
   void initState() {
     super.initState();
-    
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     _waveController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
@@ -61,76 +67,231 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
   void dispose() {
     _pulseController.dispose();
     _waveController.dispose();
-    _stateTimer?.cancel();
+    _disconnect();
+    _recorder.dispose();
+    _audioOutput.dispose();
     super.dispose();
   }
 
-  void _onMicTap() {
-    if (_state == VoiceState.idle) {
-      _startListening();
-    } else if (_state == VoiceState.listening) {
-      _stopListening();
+  Future<bool> _requestMicPermission() async {
+    final status = await Permission.microphone.request();
+    return status.isGranted;
+  }
+
+  Future<void> _onMicTap() async {
+    switch (_state) {
+      case VoiceState.idle:
+      case VoiceState.error:
+        await _connect();
+        break;
+      case VoiceState.listening:
+      case VoiceState.speaking:
+        await _disconnect();
+        break;
+      case VoiceState.connecting:
+        break;
     }
   }
 
-  void _startListening() {
-    setState(() {
-      _state = VoiceState.listening;
-    });
-    
-    _stateTimer = Timer(const Duration(seconds: 3), () {
-      _processUserInput();
-    });
-  }
-
-  void _stopListening() {
-    _stateTimer?.cancel();
-    _processUserInput();
-  }
-
-  void _processUserInput() {
-    setState(() {
-      _state = VoiceState.thinking;
-      _transcript.add(_TranscriptMessage(
-        text: "I've been feeling a bit overwhelmed lately...",
-        isUser: true,
-      ));
-    });
-    
-    _stateTimer = Timer(const Duration(seconds: 2), () {
-      _aiRespond();
-    });
-  }
-
-  void _aiRespond() {
-    final random = Random();
-    final response = _aiResponses[random.nextInt(_aiResponses.length)];
-    
-    setState(() {
-      _state = VoiceState.speaking;
-      _transcript.add(_TranscriptMessage(
-        text: response,
-        isUser: false,
-      ));
-    });
-    
-    _stateTimer = Timer(const Duration(seconds: 4), () {
+  Future<void> _connect() async {
+    final hasPermission = await _requestMicPermission();
+    if (!hasPermission) {
       setState(() {
-        _state = VoiceState.idle;
+        _state = VoiceState.error;
+        _errorMessage = 'Microphone permission is required for voice chat';
       });
+      return;
+    }
+
+    setState(() {
+      _state = VoiceState.connecting;
+      _errorMessage = null;
     });
+
+    try {
+      await _audioOutput.init();
+      await _audioOutput.playStream();
+
+      final geminiService = ref.read(geminiServiceProvider);
+      debugPrint('Connecting to Gemini Live API...');
+      _session = await geminiService.connectLive();
+      debugPrint('Connected! Starting receive and record...');
+
+      _startReceiving();
+      await _startRecording();
+
+      setState(() {
+        _state = VoiceState.listening;
+      });
+    } catch (e, stack) {
+      debugPrint('Voice connect error: $e');
+      debugPrint('Stack: $stack');
+      setState(() {
+        _state = VoiceState.error;
+        _errorMessage =
+            '${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled in your Firebase Console.';
+      });
+    }
+  }
+
+  Future<void> _startRecording() async {
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 24000,
+        numChannels: 1,
+        echoCancel: true,
+        noiseSuppress: true,
+        androidConfig: AndroidRecordConfig(
+          audioSource: AndroidAudioSource.voiceCommunication,
+        ),
+      ),
+    );
+
+    _recordSubscription = stream.listen(
+      (data) {
+        if (_session != null) {
+          _session!.sendAudioRealtime(
+            InlineDataPart('audio/pcm', data),
+          );
+        }
+      },
+      onError: (e) {
+        debugPrint('Recording error: $e');
+      },
+    );
+  }
+
+  void _startReceiving() {
+    if (_session == null) return;
+
+    _receiveSubscription = _session!.receive().listen(
+      (response) {
+        final message = response.message;
+
+        if (message is LiveServerContent) {
+          // Play model audio output
+          if (message.modelTurn != null) {
+            for (final part in message.modelTurn!.parts) {
+              if (part is InlineDataPart &&
+                  part.mimeType.startsWith('audio')) {
+                _audioOutput.addData(part.bytes);
+                if (_state != VoiceState.speaking) {
+                  setState(() => _state = VoiceState.speaking);
+                }
+              }
+            }
+          }
+
+          // Accumulate input transcription (user speech)
+          _inputTranscriptionIndex = _handleTranscription(
+            message.inputTranscription,
+            _inputTranscriptionIndex,
+            true,
+          );
+
+          // Accumulate output transcription (AI speech)
+          _outputTranscriptionIndex = _handleTranscription(
+            message.outputTranscription,
+            _outputTranscriptionIndex,
+            false,
+          );
+
+          // Turn complete -- AI finished responding
+          if (message.turnComplete == true) {
+            setState(() => _state = VoiceState.listening);
+          }
+        }
+      },
+      onError: (e) {
+        debugPrint('Live receive error: $e');
+        setState(() {
+          _state = VoiceState.error;
+          _errorMessage = 'Connection error: ${e.toString()}';
+        });
+      },
+      onDone: () {
+        if (_state != VoiceState.idle) {
+          setState(() => _state = VoiceState.idle);
+        }
+      },
+    );
+  }
+
+  /// Accumulates transcription chunks into transcript messages,
+  /// following the official FlutterFire example pattern.
+  int? _handleTranscription(
+    Transcription? transcription,
+    int? messageIndex,
+    bool isUser,
+  ) {
+    if (transcription?.text == null) return messageIndex;
+
+    int? currentIndex = messageIndex;
+
+    if (currentIndex != null && currentIndex < _transcript.length) {
+      // Append to existing transcript message
+      _transcript[currentIndex] = _TranscriptMessage(
+        text: _transcript[currentIndex].text + transcription!.text!,
+        isUser: isUser,
+      );
+    } else {
+      // Start a new transcript message
+      _transcript.add(_TranscriptMessage(
+        text: transcription!.text!,
+        isUser: isUser,
+      ));
+      currentIndex = _transcript.length - 1;
+    }
+
+    if (transcription.finished ?? false) {
+      // Transcription segment complete — next chunk starts a new message
+      currentIndex = null;
+    }
+
+    setState(() {});
+    return currentIndex;
+  }
+
+  Future<void> _disconnect() async {
+    _receiveSubscription?.cancel();
+    _receiveSubscription = null;
+    _recordSubscription?.cancel();
+    _recordSubscription = null;
+
+    try {
+      await _recorder.stop();
+    } catch (_) {}
+
+    try {
+      await _audioOutput.stopStream();
+    } catch (_) {}
+
+    try {
+      await _session?.close();
+    } catch (_) {}
+    _session = null;
+
+    _inputTranscriptionIndex = null;
+    _outputTranscriptionIndex = null;
+
+    if (mounted) {
+      setState(() => _state = VoiceState.idle);
+    }
   }
 
   String get _statusText {
     switch (_state) {
       case VoiceState.idle:
-        return 'Tap to speak';
+        return 'Tap to start';
+      case VoiceState.connecting:
+        return 'Connecting...';
       case VoiceState.listening:
         return 'Listening...';
-      case VoiceState.thinking:
-        return 'AI is thinking...';
       case VoiceState.speaking:
         return 'AI is speaking...';
+      case VoiceState.error:
+        return 'Error occurred';
     }
   }
 
@@ -138,12 +299,14 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
     switch (_state) {
       case VoiceState.idle:
         return AppColors.textSecondary;
+      case VoiceState.connecting:
+        return AppColors.warning;
       case VoiceState.listening:
         return AppColors.error;
-      case VoiceState.thinking:
-        return AppColors.warning;
       case VoiceState.speaking:
         return AppColors.success;
+      case VoiceState.error:
+        return AppColors.error;
     }
   }
 
@@ -165,14 +328,17 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // App bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () {
+                        _disconnect();
+                        Navigator.pop(context);
+                      },
                     ),
                     const Expanded(
                       child: Text(
@@ -188,19 +354,12 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                   ],
                 ),
               ),
-              
-              // Main content
               Expanded(
                 child: Column(
                   children: [
                     const Spacer(flex: 1),
-                    
-                    // Animated microphone button
                     _buildMicrophoneButton(),
-                    
                     const SizedBox(height: 24),
-                    
-                    // Status text
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: Text(
@@ -213,10 +372,21 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                         ),
                       ),
                     ),
-                    
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                     const Spacer(flex: 1),
-                    
-                    // Transcript area
                     _buildTranscriptArea(),
                   ],
                 ),
@@ -229,8 +399,9 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
   }
 
   Widget _buildMicrophoneButton() {
-    final isActive = _state == VoiceState.listening || _state == VoiceState.speaking;
-    
+    final isActive =
+        _state == VoiceState.listening || _state == VoiceState.speaking;
+
     return GestureDetector(
       onTap: _onMicTap,
       child: AnimatedBuilder(
@@ -239,14 +410,11 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
           return Stack(
             alignment: Alignment.center,
             children: [
-              // Outer ripple waves
               if (isActive) ...[
                 _buildWaveCircle(180, 0.1, 0),
                 _buildWaveCircle(160, 0.15, 0.2),
                 _buildWaveCircle(140, 0.2, 0.4),
               ],
-              
-              // Pulsing background
               Transform.scale(
                 scale: isActive ? _pulseAnimation.value : 1.0,
                 child: Container(
@@ -262,8 +430,6 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                   ),
                 ),
               ),
-              
-              // Main button
               Container(
                 width: 100,
                 height: 100,
@@ -275,8 +441,16 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                     colors: _state == VoiceState.listening
                         ? [AppColors.error, AppColors.error.withOpacity(0.8)]
                         : _state == VoiceState.speaking
-                            ? [AppColors.success, AppColors.success.withOpacity(0.8)]
-                            : [AppColors.primary, AppColors.primaryLight],
+                            ? [
+                                AppColors.success,
+                                AppColors.success.withOpacity(0.8)
+                              ]
+                            : _state == VoiceState.connecting
+                                ? [
+                                    AppColors.warning,
+                                    AppColors.warning.withOpacity(0.8)
+                                  ]
+                                : [AppColors.primary, AppColors.primaryLight],
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -291,17 +465,25 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                     ),
                   ],
                 ),
-                child: Icon(
-                  _state == VoiceState.listening
-                      ? Icons.mic
-                      : _state == VoiceState.speaking
-                          ? Icons.volume_up
-                          : _state == VoiceState.thinking
-                              ? Icons.psychology
-                              : Icons.mic_none,
-                  color: Colors.white,
-                  size: 40,
-                ),
+                child: _state == VoiceState.connecting
+                    ? const Padding(
+                        padding: EdgeInsets.all(30),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 3,
+                        ),
+                      )
+                    : Icon(
+                        _state == VoiceState.listening
+                            ? Icons.mic
+                            : _state == VoiceState.speaking
+                                ? Icons.volume_up
+                                : _state == VoiceState.error
+                                    ? Icons.refresh
+                                    : Icons.mic_none,
+                        color: Colors.white,
+                        size: 40,
+                      ),
               ),
             ],
           );
@@ -317,7 +499,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
         final value = ((_waveController.value + delay) % 1.0);
         final scale = 1.0 + (value * 0.3);
         final alpha = (1.0 - value) * opacity;
-        
+
         return Transform.scale(
           scale: scale,
           child: Container(
@@ -360,7 +542,8 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
         children: [
           Row(
             children: [
-              const Icon(Icons.history, size: 18, color: AppColors.textSecondary),
+              const Icon(Icons.history,
+                  size: 18, color: AppColors.textSecondary),
               const SizedBox(width: 8),
               Text(
                 'Conversation',
@@ -388,7 +571,8 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                     reverse: true,
                     itemCount: _transcript.length,
                     itemBuilder: (context, index) {
-                      final message = _transcript[_transcript.length - 1 - index];
+                      final message =
+                          _transcript[_transcript.length - 1 - index];
                       return _TranscriptBubble(message: message);
                     },
                   ),
@@ -430,7 +614,8 @@ class _TranscriptBubble extends StatelessWidget {
             child: Icon(
               message.isUser ? Icons.person : Icons.psychology,
               size: 14,
-              color: message.isUser ? AppColors.primary : AppColors.secondary,
+              color:
+                  message.isUser ? AppColors.primary : AppColors.secondary,
             ),
           ),
           const SizedBox(width: 8),
