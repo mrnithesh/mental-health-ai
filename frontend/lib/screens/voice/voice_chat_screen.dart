@@ -603,7 +603,7 @@ class _TranscriptBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  message.isUser ? 'You' : 'MindfulAI',
+                  message.isUser ? 'You' : 'NILAA',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,

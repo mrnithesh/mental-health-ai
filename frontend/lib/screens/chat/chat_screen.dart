@@ -42,7 +42,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     _messages.add(_ChatMessage(
       text:
-          "Hey! I'm MindfulAI, your mental health buddy. I'm here to listen and support you—no judgment. How are you feeling today?",
+          "Hey! I'm NILAA, your virtual friend. You can talk to me about anything—casual stuff, feelings, or whatever is on your mind. How are you doing today?",
       isUser: false,
       timestamp: DateTime.now(),
     ));
@@ -209,7 +209,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'MindfulAI',
+                  'NILAA',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 Row(

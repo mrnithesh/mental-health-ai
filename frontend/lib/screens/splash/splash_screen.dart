@@ -132,7 +132,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                       const SizedBox(height: 28),
                       const Text(
-                        'MindfulAI',
+                        'NILAA',
                         style: TextStyle(
                           fontSize: 34,
                           fontWeight: FontWeight.bold,

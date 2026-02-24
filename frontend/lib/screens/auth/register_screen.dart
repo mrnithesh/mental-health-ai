@@ -74,7 +74,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               children: [
                 const SizedBox(height: 20),
                 const Text(
-                  'Join MindfulAI',
+                  'Join NILAA',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
