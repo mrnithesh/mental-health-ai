@@ -16,7 +16,7 @@ Last updated: 2026-01-28
 - [x] Theme system (light/dark themes)
 - [x] Route configuration
 - [x] Data models (User, Conversation, Message, Journal, Mood)
-- [x] Services (AuthService, ApiService, FirestoreService, GeminiLiveService)
+- [x] Services (AuthService, FirestoreService, GeminiService)
 - [x] Riverpod providers for state management
 - [x] Auth screens (Login, Register, Phone OTP)
 - [x] Home dashboard with mood check-in
@@ -25,17 +25,8 @@ Last updated: 2026-01-28
 - [x] Journal list and editor screens
 - [x] Mood tracker and history screens
 
-### FastAPI Backend (backend/)
-- [x] Project structure with Dockerfile
-- [x] Configuration with environment variables
-- [x] Firebase Admin SDK integration
-- [x] Gemini API integration
-- [x] Auth router (token validation)
-- [x] Chat router (streaming SSE)
-- [x] Voice router (ephemeral token)
-- [x] Journal router (AI insights)
-- [x] Mood router (pattern analysis)
-- [x] Firestore service for data operations
+### Backend
+- [x] Legacy backend removed from repository
 
 ### Firebase Configuration
 - [x] firebase.json
@@ -47,7 +38,6 @@ Last updated: 2026-01-28
 ## Pending
 
 ### Deployment
-- [ ] Deploy backend to Cloud Run
 - [ ] Configure Firebase project
 - [ ] Run `flutterfire configure`
 - [ ] Build and test Android APK
@@ -63,12 +53,11 @@ Last updated: 2026-01-28
 ## Decisions Made
 
 ### 2026-01-28
-1. **Backend**: Chose FastAPI on Cloud Run over Firebase Cloud Functions for flexibility and no cold starts
+1. **Architecture**: Moved to frontend-only app using Firebase AI Logic directly
 2. **State Management**: Using Riverpod for Flutter
-3. **Voice Chat**: Direct WebSocket to Gemini Live (backend only generates ephemeral tokens)
+3. **Voice Chat**: Direct Gemini Live integration from Flutter
 4. **Auth**: Firebase Auth with Email, Google Sign-in, and Phone OTP
-5. **HTTP Client**: Using Dio for Flutter API calls
-6. **Audio Recording**: Using `record` package for voice chat
+5. **Audio Recording**: Using `record` package for voice chat
 
 ---
 

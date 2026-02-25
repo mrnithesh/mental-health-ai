@@ -1,15 +1,4 @@
 class AppConstants {
-  // API Configuration
-  // TODO: Replace with your Cloud Run URL after deployment
-  static const String apiBaseUrl = 'https://0c603127f80a.ngrok-free.app ';
-  
-  // Gemini WebSocket URL
-  static const String geminiWebSocketUrl = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-  
-  // Timeouts
-  static const Duration apiTimeout = Duration(seconds: 30);
-  static const Duration connectionTimeout = Duration(seconds: 10);
-  
   // Pagination
   static const int defaultPageSize = 20;
   
