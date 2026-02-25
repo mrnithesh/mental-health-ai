@@ -46,7 +46,7 @@ Last updated: 2026-01-28
 - Model: `gemini-2.5-flash`
 - SDK: `firebase_ai` → `FirebaseAI.googleAI(auth: FirebaseAuth.instance).generativeModel()`
 - Multi-turn via `ChatSession.sendMessageStream()`
-- System instruction: MindfulAI mental health companion persona
+- System instruction: NILAA virtual friend persona
 - **Important**: Firebase Auth (anonymous) required before using the SDK
 
 ### Voice Chat (Gemini Live API)
@@ -55,9 +55,9 @@ Last updated: 2026-01-28
 - Bidirectional audio via WebSocket: `LiveSession`
 - Mic recording: `record` package (PCM 16-bit, 24kHz, mono, echo cancel, noise suppress)
 - Audio MIME type: `audio/pcm` (no rate suffix)
-- Speech config: `SpeechConfig(voiceName: 'Fenrir')`
+- Speech config: `SpeechConfig(voiceName: 'Leda')`
 - Transcription: enabled via `AudioTranscriptionConfig`
-- Audio playback: TODO (transcript display working)
+- Audio playback: implemented with `flutter_soloud` streaming output
 
 ## Firestore Schema
 
@@ -155,9 +155,5 @@ Production flow:
 - permission_handler: ^11.3.0
 - fl_chart, intl, uuid, shared_preferences, path_provider
 
-### Backend (requirements.txt)
-- fastapi, uvicorn
-- firebase-admin
-- google-generativeai
-- python-dotenv
-- pydantic
+### Backend
+- Custom backend removed from repository
