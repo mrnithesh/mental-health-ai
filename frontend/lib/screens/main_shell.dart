@@ -33,7 +33,7 @@ class _MainShellState extends State<MainShell> {
         children: _screens,
       ),
       bottomNavigationBar: _buildBottomBar(),
-      floatingActionButton: _buildVoiceFab(),
+      floatingActionButton: _currentIndex == 1 ? null : _buildVoiceFab(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
@@ -44,7 +44,7 @@ class _MainShellState extends State<MainShell> {
         color: AppColors.surface,
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryDark.withOpacity(0.06),
+            color: AppColors.primaryDark.withValues(alpha: 0.06),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -70,7 +70,7 @@ class _MainShellState extends State<MainShell> {
                 isSelected: _currentIndex == 1,
                 onTap: () => setState(() => _currentIndex = 1),
               ),
-              const SizedBox(width: 56),
+              if (_currentIndex != 1) const SizedBox(width: 56),
               _NavItem(
                 icon: Icons.edit_note_outlined,
                 activeIcon: Icons.edit_note_rounded,
@@ -113,7 +113,7 @@ class _MainShellState extends State<MainShell> {
           boxShadow: [
             BoxShadow(
               color: (isActive ? AppColors.secondary : AppColors.primary)
-                  .withOpacity(0.4),
+                  .withValues(alpha: 0.4),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),

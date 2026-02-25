@@ -1,47 +1,47 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Primary — calm trustworthy blue
-  static const Color primary = Color(0xFF5B7FBA);
-  static const Color primaryLight = Color(0xFF8AAFD4);
-  static const Color primaryDark = Color(0xFF3D5A8A);
+  // Primary — warm coral
+  static const Color primary = Color(0xFFD97756);
+  static const Color primaryLight = Color(0xFFE8A08A);
+  static const Color primaryDark = Color(0xFFB85C3F);
 
-  // Secondary — therapeutic sage green
-  static const Color secondary = Color(0xFF6ABFA3);
-  static const Color secondaryLight = Color(0xFF94D5C0);
-  static const Color secondaryDark = Color(0xFF4A9A7F);
+  // Secondary — soft sage
+  static const Color secondary = Color(0xFF8BAA90);
+  static const Color secondaryLight = Color(0xFFB0CEAB);
+  static const Color secondaryDark = Color(0xFF6B8D6F);
 
-  // Accent — warm gold
-  static const Color accent = Color(0xFFF4C065);
-  static const Color accentLight = Color(0xFFF8D58F);
+  // Accent — warm amber
+  static const Color accent = Color(0xFFE8A838);
+  static const Color accentLight = Color(0xFFF0C468);
 
-  // Neutral
-  static const Color background = Color(0xFFF5F7FA);
+  // Neutral — warm tones
+  static const Color background = Color(0xFFFAF8F5);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFEDF1F7);
+  static const Color surfaceVariant = Color(0xFFF0ECE6);
 
-  // Text (higher contrast for readability)
-  static const Color textPrimary = Color(0xFF1E293B);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color textTertiary = Color(0xFF6B7B8F);
+  // Text — warm charcoal
+  static const Color textPrimary = Color(0xFF2D2520);
+  static const Color textSecondary = Color(0xFF6B6560);
+  static const Color textTertiary = Color(0xFF9A9490);
 
   // Status
-  static const Color success = Color(0xFF22C55E);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color error = Color(0xFFEF4444);
-  static const Color info = Color(0xFF3B82F6);
+  static const Color success = Color(0xFF4CAF6A);
+  static const Color warning = Color(0xFFE8A838);
+  static const Color error = Color(0xFFD94F4F);
+  static const Color info = Color(0xFF5A8FD4);
 
   // Mood
-  static const Color moodExcellent = Color(0xFF22C55E);
-  static const Color moodGood = Color(0xFF6ABFA3);
-  static const Color moodNeutral = Color(0xFFF4C065);
-  static const Color moodBad = Color(0xFFFB923C);
-  static const Color moodTerrible = Color(0xFFEF4444);
+  static const Color moodExcellent = Color(0xFF4CAF6A);
+  static const Color moodGood = Color(0xFF8BAA90);
+  static const Color moodNeutral = Color(0xFFE8A838);
+  static const Color moodBad = Color(0xFFE88D4F);
+  static const Color moodTerrible = Color(0xFFD94F4F);
 
-  // Dark theme
-  static const Color darkBackground = Color(0xFF0F172A);
-  static const Color darkSurface = Color(0xFF1E293B);
-  static const Color darkSurfaceVariant = Color(0xFF334155);
+  // Dark theme — warm darks
+  static const Color darkBackground = Color(0xFF1A1614);
+  static const Color darkSurface = Color(0xFF2A2520);
+  static const Color darkSurfaceVariant = Color(0xFF3A3530);
 }
 
 class AppRadius {
@@ -158,7 +158,7 @@ class AppTheme {
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -172,7 +172,7 @@ class AppTheme {
           side: const BorderSide(color: AppColors.primary),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -193,19 +193,19 @@ class AppTheme {
         filled: true,
         fillColor: AppColors.surfaceVariant,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: const BorderSide(color: AppColors.error),
         ),
         contentPadding:
@@ -278,7 +278,7 @@ class AppTheme {
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
           ),
         ),
       ),
@@ -286,15 +286,15 @@ class AppTheme {
         filled: true,
         fillColor: AppColors.darkSurfaceVariant,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: const BorderSide(color: AppColors.primaryLight, width: 2),
         ),
       ),

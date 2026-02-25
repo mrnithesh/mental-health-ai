@@ -4,6 +4,7 @@ import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
 
@@ -22,9 +23,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
+  bool _isInputFocused = false;
   ChatSession? _chatSession;
 
   late AnimationController _typingController;
+  late VoidCallback _messageInputListener;
+
+  bool get _canSend => _messageController.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -34,6 +39,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       duration: const Duration(milliseconds: 600),
       vsync: this,
     )..repeat(reverse: true);
+    _messageInputListener = () {
+      if (mounted) setState(() {});
+    };
+    _messageController.addListener(_messageInputListener);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final geminiService = ref.read(geminiServiceProvider);
@@ -50,6 +59,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   void dispose() {
+    _messageController.removeListener(_messageInputListener);
     _messageController.dispose();
     _scrollController.dispose();
     _typingController.dispose();
@@ -92,17 +102,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _scrollToBottom();
 
     try {
-      final aiMessage = _ChatMessage(
-        text: '',
-        isUser: false,
-        timestamp: DateTime.now(),
-      );
-
-      setState(() {
-        _messages.add(aiMessage);
-      });
-
-      final aiMessageIndex = _messages.length - 1;
+      int? aiMessageIndex;
+      final aiMessageTime = DateTime.now();
       final responseStream = _chatSession!.sendMessageStream(
         Content.text(text),
       );
@@ -112,25 +113,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (chunkText != null && chunkText.isNotEmpty) {
           setState(() {
             _isTyping = false;
-            if (aiMessageIndex < _messages.length) {
-              _messages[aiMessageIndex] = _ChatMessage(
-                text: _messages[aiMessageIndex].text + chunkText,
+            aiMessageIndex ??= _messages.length;
+            if (aiMessageIndex == _messages.length) {
+              _messages.add(_ChatMessage(
+                text: chunkText,
                 isUser: false,
-                timestamp: _messages[aiMessageIndex].timestamp,
+                timestamp: aiMessageTime,
+              ));
+            } else if (aiMessageIndex! < _messages.length) {
+              _messages[aiMessageIndex!] = _ChatMessage(
+                text: _messages[aiMessageIndex!].text + chunkText,
+                isUser: false,
+                timestamp: _messages[aiMessageIndex!].timestamp,
               );
             }
           });
           _scrollToBottom();
         }
       }
+
+      if (mounted) {
+        setState(() {
+          _isTyping = false;
+          if (aiMessageIndex == null) {
+            _messages.add(_ChatMessage(
+              text: "I couldn't generate a response right now. Please try again.",
+              isUser: false,
+              timestamp: aiMessageTime,
+              isError: true,
+            ));
+          }
+        });
+      }
     } catch (e) {
       debugPrint('Chat error: $e');
       setState(() {
         _isTyping = false;
-        final idx = _messages.lastIndexWhere((m) => !m.isUser && m.text.isEmpty);
-        if (idx != -1) {
-          _messages.removeAt(idx);
-        }
         _messages.add(_ChatMessage(
           text:
               'Error: ${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled in your Firebase Console.',
@@ -161,72 +179,86 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    const isDark = false;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: _ChatPalette.background(isDark),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildAppBar(),
-            Expanded(child: _buildMessagesList()),
-            if (_isTyping) _buildTypingIndicator(),
-            _buildInputArea(),
-          ],
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.primary.withValues(alpha: 0.06),
+                AppColors.background,
+                AppColors.secondary.withValues(alpha: 0.03),
+              ],
+            ),
+          ),
+          child: Column(
+            children: [
+              _buildAppBar(isDark),
+              Expanded(child: _buildMessagesList(isDark)),
+              if (_isTyping) _buildTypingIndicator(isDark),
+              _buildInputArea(isDark),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAppBar() {
+  Widget _buildAppBar(bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: _ChatPalette.headerSurface(isDark),
         border: Border(
-          bottom: BorderSide(color: AppColors.surfaceVariant, width: 1),
+          bottom: BorderSide(color: _ChatPalette.border(isDark), width: 1),
         ),
       ),
       child: Row(
         children: [
-          const SizedBox(width: 8),
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.secondary, AppColors.secondaryLight],
-              ),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
+              color: _ChatPalette.avatarBackground(isDark),
+              borderRadius: BorderRadius.circular(11),
             ),
             child: const Icon(
               Icons.auto_awesome_rounded,
-              color: Colors.white,
-              size: 20,
+              color: _ChatPalette.accent,
+              size: 18,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'NILAA',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: _ChatPalette.textPrimary(isDark),
+                      ),
                 ),
                 Row(
                   children: [
                     Container(
-                      width: 7,
-                      height: 7,
+                      width: 6,
+                      height: 6,
                       decoration: const BoxDecoration(
-                        color: AppColors.success,
+                        color: _ChatPalette.online,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Powered by Gemini',
+                      'Online',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppColors.textTertiary,
+                            color: _ChatPalette.textSecondary(isDark),
                           ),
                     ),
                   ],
@@ -234,65 +266,95 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ],
             ),
           ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: _ChatPalette.statusPillBackground(isDark),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: _ChatPalette.border(isDark)),
+            ),
+            child: Text(
+              'Private chat',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: _ChatPalette.textSecondary(isDark),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMessagesList() {
+  Widget _buildMessagesList(bool isDark) {
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       itemCount: _messages.length,
       itemBuilder: (context, index) {
         final message = _messages[index];
         final showAvatar =
             index == 0 || _messages[index - 1].isUser != message.isUser;
 
-        return _MessageBubble(
-          message: message,
-          showAvatar: showAvatar,
+        return _AnimatedMessageEntry(
+          key: ValueKey('${message.timestamp.microsecondsSinceEpoch}-${message.isUser}'),
+          isUser: message.isUser,
+          child: _MessageBubble(
+            message: message,
+            showAvatar: showAvatar,
+            isDark: isDark,
+          ),
         );
       },
     );
   }
 
-  Widget _buildTypingIndicator() {
+  Widget _buildTypingIndicator(bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
       child: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
+            width: 26,
+            height: 26,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.secondary, AppColors.secondaryLight],
-              ),
-              borderRadius: BorderRadius.circular(10),
+              color: _ChatPalette.avatarBackground(isDark),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: const Icon(
               Icons.auto_awesome_rounded,
-              color: Colors.white,
-              size: 16,
+              color: _ChatPalette.accent,
+              size: 14,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              border: Border.all(color: AppColors.surfaceVariant),
+              color: _ChatPalette.assistantBubbleBackground(isDark),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _ChatPalette.border(isDark)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _TypingDot(controller: _typingController, delay: 0.0),
+                _TypingDot(
+                  controller: _typingController,
+                  delay: 0.0,
+                  color: _ChatPalette.accent,
+                ),
                 const SizedBox(width: 4),
-                _TypingDot(controller: _typingController, delay: 0.2),
+                _TypingDot(
+                  controller: _typingController,
+                  delay: 0.2,
+                  color: _ChatPalette.accent,
+                ),
                 const SizedBox(width: 4),
-                _TypingDot(controller: _typingController, delay: 0.4),
+                _TypingDot(
+                  controller: _typingController,
+                  delay: 0.4,
+                  color: _ChatPalette.accent,
+                ),
               ],
             ),
           ),
@@ -301,67 +363,105 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildInputArea() {
+  Widget _buildInputArea(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: _ChatPalette.composerSurface(isDark),
         border: Border(
-          top: BorderSide(color: AppColors.surfaceVariant, width: 1),
+          top: BorderSide(color: _ChatPalette.border(isDark), width: 1),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(AppRadius.xl),
+                color: _ChatPalette.inputBackground(isDark),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: _isInputFocused
+                      ? _ChatPalette.accent
+                      : _ChatPalette.border(isDark),
+                  width: _isInputFocused ? 1.3 : 1,
+                ),
               ),
               child: TextField(
                 controller: _messageController,
-                decoration: const InputDecoration(
+                minLines: 1,
+                maxLines: 5,
+                onTap: () {
+                  if (!_isInputFocused && mounted) {
+                    setState(() => _isInputFocused = true);
+                  }
+                },
+                onTapOutside: (_) {
+                  if (_isInputFocused && mounted) {
+                    setState(() => _isInputFocused = false);
+                  }
+                  FocusScope.of(context).unfocus();
+                },
+                decoration: InputDecoration(
                   hintText: 'Type your message...',
-                  hintStyle: TextStyle(color: AppColors.textTertiary),
+                  hintStyle: TextStyle(color: _ChatPalette.textHint(isDark)),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 20,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
                     vertical: 12,
                   ),
                 ),
                 textInputAction: TextInputAction.send,
+                style: TextStyle(
+                  color: _ChatPalette.textPrimary(isDark),
+                  height: 1.35,
+                ),
+                onChanged: (_) {
+                  if (mounted) setState(() {});
+                },
                 onSubmitted: (_) => _sendMessage(),
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Container(
+          const SizedBox(width: 8),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.primaryLight],
+              color: _canSend
+                  ? _ChatPalette.accent
+                  : _ChatPalette.sendDisabled(isDark),
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: _canSend
+                  ? [
+                      BoxShadow(
+                        color: _ChatPalette.accent.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : const [],
+              border: Border.all(
+                color: _canSend
+                    ? _ChatPalette.accent
+                    : _ChatPalette.border(isDark),
               ),
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _sendMessage,
-                borderRadius: BorderRadius.circular(AppRadius.xl),
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
+                onTap: _canSend
+                    ? _sendMessage
+                    : () => Navigator.of(context).pushNamed(AppRoutes.voiceChat),
+                borderRadius: BorderRadius.circular(22),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
                   child: Icon(
-                    Icons.send_rounded,
-                    color: Colors.white,
-                    size: 22,
+                    _canSend ? Icons.send_rounded : Icons.mic_rounded,
+                    color: _canSend ? Colors.white : _ChatPalette.textHint(isDark),
+                    size: 20,
                   ),
                 ),
               ),
@@ -390,17 +490,19 @@ class _ChatMessage {
 class _MessageBubble extends StatelessWidget {
   final _ChatMessage message;
   final bool showAvatar;
+  final bool isDark;
 
   const _MessageBubble({
     required this.message,
     required this.showAvatar,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        bottom: 10,
+        bottom: 8,
         left: message.isUser ? 48 : 0,
         right: message.isUser ? 0 : 48,
       ),
@@ -411,50 +513,45 @@ class _MessageBubble extends StatelessWidget {
         children: [
           if (!message.isUser && showAvatar)
             Container(
-              width: 30,
-              height: 30,
-              margin: const EdgeInsets.only(right: 8),
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(right: 7),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.secondary, AppColors.secondaryLight],
-                ),
-                borderRadius: BorderRadius.circular(10),
+                color: _ChatPalette.avatarBackground(isDark),
+                borderRadius: BorderRadius.circular(9),
               ),
               child: const Icon(
                 Icons.auto_awesome_rounded,
-                color: Colors.white,
-                size: 16,
+                color: _ChatPalette.accent,
+                size: 14,
               ),
             )
           else if (!message.isUser)
-            const SizedBox(width: 38),
+            const SizedBox(width: 35),
           Flexible(
-            child: Container(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 410),
+              child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
               decoration: BoxDecoration(
-                gradient: message.isUser
-                    ? const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryLight],
-                      )
-                    : null,
                 color: message.isUser
-                    ? null
+                    ? _ChatPalette.userBubbleBackground
                     : message.isError
-                        ? AppColors.error.withOpacity(0.08)
-                        : AppColors.surface,
+                        ? _ChatPalette.errorBubbleBackground(isDark)
+                        : _ChatPalette.assistantBubbleBackground(isDark),
                 borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(20),
-                  topRight: const Radius.circular(20),
-                  bottomLeft: Radius.circular(message.isUser ? 20 : 4),
-                  bottomRight: Radius.circular(message.isUser ? 4 : 20),
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(message.isUser ? 16 : 5),
+                  bottomRight: Radius.circular(message.isUser ? 5 : 16),
                 ),
-                border: message.isUser
-                    ? null
-                    : Border.all(
-                        color: message.isError
-                            ? AppColors.error.withOpacity(0.2)
-                            : AppColors.surfaceVariant,
-                      ),
+                border: Border.all(
+                  color: message.isUser
+                      ? _ChatPalette.userBubbleBackground
+                      : message.isError
+                          ? _ChatPalette.errorBorder
+                          : _ChatPalette.border(isDark),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,7 +564,7 @@ class _MessageBubble extends StatelessWidget {
                           ? Colors.white
                           : message.isError
                               ? AppColors.error
-                              : AppColors.textPrimary,
+                              : _ChatPalette.textPrimary(isDark),
                       height: 1.45,
                     ),
                   ),
@@ -477,33 +574,32 @@ class _MessageBubble extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       color: message.isUser
-                          ? Colors.white.withOpacity(0.7)
-                          : AppColors.textTertiary,
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : _ChatPalette.textSecondary(isDark),
                     ),
                   ),
                 ],
               ),
             ),
+            ),
           ),
           if (message.isUser && showAvatar)
             Container(
-              width: 30,
-              height: 30,
-              margin: const EdgeInsets.only(left: 8),
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(left: 7),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primaryDark, AppColors.primary],
-                ),
-                borderRadius: BorderRadius.circular(10),
+                color: _ChatPalette.userAvatarBackground,
+                borderRadius: BorderRadius.circular(9),
               ),
               child: const Icon(
                 Icons.person_rounded,
                 color: Colors.white,
-                size: 16,
+                size: 14,
               ),
             )
           else if (message.isUser)
-            const SizedBox(width: 38),
+            const SizedBox(width: 35),
         ],
       ),
     );
@@ -519,8 +615,13 @@ class _MessageBubble extends StatelessWidget {
 class _TypingDot extends StatelessWidget {
   final AnimationController controller;
   final double delay;
+  final Color color;
 
-  const _TypingDot({required this.controller, required this.delay});
+  const _TypingDot({
+    required this.controller,
+    required this.delay,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -535,11 +636,78 @@ class _TypingDot extends StatelessWidget {
           width: 7,
           height: 7,
           decoration: BoxDecoration(
-            color: AppColors.secondary.withOpacity(opacity),
+            color: color.withValues(alpha: opacity),
             shape: BoxShape.circle,
           ),
         );
       },
     );
   }
+}
+
+class _AnimatedMessageEntry extends StatelessWidget {
+  final Widget child;
+  final bool isUser;
+
+  const _AnimatedMessageEntry({
+    super.key,
+    required this.child,
+    required this.isUser,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        final offsetY = (1 - value) * 0.045;
+        final offsetX = (1 - value) * (isUser ? 0.02 : -0.02);
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(offsetX * 100, offsetY * 100),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+class _ChatPalette {
+  static const Color accent = AppColors.primary;
+  static const Color online = AppColors.success;
+  static const Color userBubbleBackground = AppColors.primary;
+  static const Color userAvatarBackground = AppColors.primaryDark;
+  static const Color errorBorder = Color(0xFFFCA5A5);
+
+  static Color background(bool isDark) =>
+      isDark ? AppColors.darkBackground : AppColors.background;
+  static Color headerSurface(bool isDark) =>
+      isDark ? AppColors.darkSurface : AppColors.surface;
+  static Color composerSurface(bool isDark) =>
+      isDark ? AppColors.darkSurface : AppColors.surface;
+  static Color inputBackground(bool isDark) =>
+      isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
+  static Color assistantBubbleBackground(bool isDark) =>
+      isDark ? AppColors.darkSurfaceVariant : AppColors.surface;
+  static Color errorBubbleBackground(bool isDark) =>
+      isDark ? const Color(0xFF3A2520) : const Color(0xFFFEF0EE);
+  static Color avatarBackground(bool isDark) =>
+      isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
+  static Color statusPillBackground(bool isDark) =>
+      isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
+  static Color border(bool isDark) =>
+      isDark ? const Color(0xFF4A4540) : AppColors.surfaceVariant;
+  static Color sendDisabled(bool isDark) =>
+      isDark ? const Color(0xFF4A4540) : AppColors.surfaceVariant;
+  static Color textPrimary(bool isDark) =>
+      isDark ? const Color(0xFFEDE8E4) : AppColors.textPrimary;
+  static Color textSecondary(bool isDark) =>
+      isDark ? AppColors.textTertiary : AppColors.textSecondary;
+  static Color textHint(bool isDark) =>
+      isDark ? AppColors.textTertiary : AppColors.textTertiary;
 }
