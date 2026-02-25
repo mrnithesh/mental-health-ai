@@ -37,7 +37,6 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
       return;
     }
 
-    // Add country code if not present
     final formattedNumber =
         phoneNumber.startsWith('+') ? phoneNumber : '+91$phoneNumber';
 
@@ -54,9 +53,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     }
 
     final success = await ref.read(phoneAuthProvider.notifier).verifyOtp(otp);
-    
+
     if (success && mounted) {
-      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      Navigator.of(context).pushReplacementNamed(AppRoutes.main);
     }
   }
 
@@ -67,7 +66,6 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     final isVerifying = phoneAuthState.isVerifying;
     final error = phoneAuthState.error;
 
-    // Show error if any
     if (error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,128 +75,158 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Phone Sign In'),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+      backgroundColor: AppColors.background,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.primary.withValues(alpha: 0.06),
+              AppColors.background,
+              AppColors.secondary.withValues(alpha: 0.03),
+            ],
+          ),
+        ),
+        child: SafeArea(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 20),
-              // Icon
-              const Icon(
-                Icons.phone_android,
-                size: 64,
-                color: AppColors.primary,
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Verify Your Phone',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isCodeSent
-                    ? 'Enter the 6-digit code sent to your phone'
-                    : 'We will send you a verification code',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 40),
-
-              if (!isCodeSent) ...[
-                // Phone number input
-                TextFormField(
-                  controller: _phoneController,
-                  focusNode: _phoneFocusNode,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    prefixIcon: Icon(Icons.phone),
-                    prefixText: '+91 ',
-                    hintText: '9876543210',
-                  ),
-                  onFieldSubmitted: (_) => _sendOtp(),
-                ),
-                const SizedBox(height: 24),
-                LoadingButton(
-                  onPressed: _sendOtp,
-                  isLoading: isVerifying,
-                  child: const Text('Send OTP'),
-                ),
-              ] else ...[
-                // OTP input
-                TextFormField(
-                  controller: _otpController,
-                  focusNode: _otpFocusNode,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
-                  maxLength: 6,
-                  decoration: const InputDecoration(
-                    labelText: 'Enter OTP',
-                    prefixIcon: Icon(Icons.lock_clock),
-                    counterText: '',
-                  ),
-                  style: const TextStyle(
-                    fontSize: 24,
-                    letterSpacing: 8,
-                  ),
-                  textAlign: TextAlign.center,
-                  onFieldSubmitted: (_) => _verifyOtp(),
-                ),
-                const SizedBox(height: 24),
-                LoadingButton(
-                  onPressed: _verifyOtp,
-                  isLoading: isVerifying,
-                  child: const Text('Verify OTP'),
-                ),
-                const SizedBox(height: 16),
-                // Resend OTP
-                TextButton(
-                  onPressed: isVerifying
-                      ? null
-                      : () {
-                          ref.read(phoneAuthProvider.notifier).reset();
-                        },
-                  child: const Text('Change Phone Number'),
-                ),
-              ],
-              const SizedBox(height: 24),
-
-              // Info text
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.info.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.info_outline,
-                      color: AppColors.info,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Standard SMS charges may apply',
-                        style: TextStyle(
-                          color: AppColors.info,
-                          fontSize: 14,
-                        ),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: () => Navigator.of(context).pop(),
+                      color: AppColors.textPrimary,
                     ),
                   ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 20),
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: const Icon(
+                          Icons.phone_android_rounded,
+                          size: 36,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Verify Your Phone',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        isCodeSent
+                            ? 'Enter the 6-digit code sent to your phone'
+                            : 'We will send you a verification code',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+
+                      if (!isCodeSent) ...[
+                        TextFormField(
+                          controller: _phoneController,
+                          focusNode: _phoneFocusNode,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.done,
+                          decoration: const InputDecoration(
+                            labelText: 'Phone Number',
+                            prefixIcon: Icon(Icons.phone_outlined),
+                            prefixText: '+91 ',
+                            hintText: '9876543210',
+                          ),
+                          onFieldSubmitted: (_) => _sendOtp(),
+                        ),
+                        const SizedBox(height: 28),
+                        LoadingButton(
+                          onPressed: _sendOtp,
+                          isLoading: isVerifying,
+                          child: const Text('Send OTP'),
+                        ),
+                      ] else ...[
+                        TextFormField(
+                          controller: _otpController,
+                          focusNode: _otpFocusNode,
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.done,
+                          maxLength: 6,
+                          decoration: const InputDecoration(
+                            labelText: 'Enter OTP',
+                            prefixIcon: Icon(Icons.lock_clock_outlined),
+                            counterText: '',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            letterSpacing: 8,
+                          ),
+                          textAlign: TextAlign.center,
+                          onFieldSubmitted: (_) => _verifyOtp(),
+                        ),
+                        const SizedBox(height: 28),
+                        LoadingButton(
+                          onPressed: _verifyOtp,
+                          isLoading: isVerifying,
+                          child: const Text('Verify OTP'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: isVerifying
+                              ? null
+                              : () => ref.read(phoneAuthProvider.notifier).reset(),
+                          child: const Text('Change Phone Number'),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: AppColors.secondary,
+                              size: 20,
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Standard SMS charges may apply',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

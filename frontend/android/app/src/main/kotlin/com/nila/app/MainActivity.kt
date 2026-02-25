@@ -1,4 +1,4 @@
-package com.example.mental_health_ai
+package com.nila.app
 
 import io.flutter.embedding.android.FlutterActivity
 

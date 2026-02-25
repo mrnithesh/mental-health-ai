@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,8 +60,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 2200));
     if (!mounted) return;
 
-    // Demo mode: skip auth, go directly to main shell
-    Navigator.of(context).pushReplacementNamed(AppRoutes.main);
+    final user = FirebaseAuth.instance.currentUser;
+    final route = user != null ? AppRoutes.main : AppRoutes.login;
+    Navigator.of(context).pushReplacementNamed(route);
   }
 
   @override
@@ -104,7 +106,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.white
-                                      .withOpacity(_glowAnimation.value * 0.15),
+                                      .withValues(alpha: _glowAnimation.value * 0.15),
                                   blurRadius: 40,
                                   spreadRadius: 10,
                                 ),
@@ -114,10 +116,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                               width: 120,
                               height: 120,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(30),
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                   width: 1.5,
                                 ),
                               ),
@@ -145,7 +147,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         'Your AI Mental Health Companion',
                         style: TextStyle(
                           fontSize: 15,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -156,7 +158,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white.withOpacity(0.7),
+                            Colors.white.withValues(alpha: 0.7),
                           ),
                         ),
                       ),

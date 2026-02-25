@@ -131,7 +131,7 @@ class PhoneAuthNotifier extends StateNotifier<PhoneAuthState> {
         );
       },
       onAutoVerify: (credential) async {
-        await _authService.signInWithGoogle();
+        await _authService.signInWithPhoneCredential(credential);
       },
     );
   }

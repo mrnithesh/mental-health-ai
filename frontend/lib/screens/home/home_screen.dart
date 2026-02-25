@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/routes.dart';
 import '../../config/theme.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/glass_card.dart';
@@ -33,6 +36,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await ref.read(authNotifierProvider.notifier).signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      AppRoutes.login,
+      (_) => false,
+    );
+  }
+
+  String get _userName {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.displayName ?? 'Friend';
+  }
+
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
@@ -46,7 +83,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Greeting + status
               AnimatedListItem(
                 index: 0,
                 child: _buildGreetingSection(tt),
@@ -112,12 +148,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         style: tt.bodyMedium?.copyWith(
                             color: AppColors.textSecondary)),
                     const SizedBox(height: 2),
-                    Text('Friend',
-                        style: tt.headlineMedium),
+                    Text(_userName, style: tt.headlineMedium),
                   ],
                 ),
               ),
               _buildStatusChip(),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _signOut,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.logout_rounded,
+                    size: 18,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -151,7 +202,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: (ok ? AppColors.success : AppColors.error).withOpacity(0.1),
+          color: (ok ? AppColors.success : AppColors.error).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -203,15 +254,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildDailyInsight(TextTheme tt) {
     return GlassCard(
       padding: const EdgeInsets.all(20),
-      backgroundColor: AppColors.accent.withOpacity(0.08),
-      border: Border.all(color: AppColors.accent.withOpacity(0.15)),
+      backgroundColor: AppColors.accent.withValues(alpha: 0.08),
+      border: Border.all(color: AppColors.accent.withValues(alpha: 0.15)),
       child: Row(
         children: [
           Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.accent.withOpacity(0.2),
+              color: AppColors.accent.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: const Icon(
@@ -307,9 +358,9 @@ class _MoodChip extends StatelessWidget {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: color.withOpacity(0.2)),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
           child: Center(
             child: Text(emoji, style: const TextStyle(fontSize: 26)),
@@ -357,7 +408,7 @@ class _WellnessCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Icon(icon, color: color, size: 20),

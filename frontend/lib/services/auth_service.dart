@@ -15,11 +15,6 @@ class AuthService {
   /// Stream of auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  /// Get current user's ID token
-  Future<String?> getIdToken() async {
-    return await _auth.currentUser?.getIdToken();
-  }
-
   /// Sign in with email and password
   Future<UserCredential> signInWithEmail(String email, String password) async {
     final credential = await _auth.signInWithEmailAndPassword(
@@ -87,6 +82,15 @@ class AuthService {
       codeAutoRetrievalTimeout: (_) {},
       timeout: const Duration(seconds: 60),
     );
+  }
+
+  /// Sign in with an auto-verified phone credential
+  Future<UserCredential> signInWithPhoneCredential(
+    PhoneAuthCredential credential,
+  ) async {
+    final userCredential = await _auth.signInWithCredential(credential);
+    await _createOrUpdateUserDocument(userCredential.user!);
+    return userCredential;
   }
 
   /// Verify phone OTP and sign in
