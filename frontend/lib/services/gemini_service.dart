@@ -75,6 +75,45 @@ Guidelines:
 
   Future<LiveSession> connectLive() => _voiceModel.connect();
 
+  /// Detect the emotional tone of journal content as a mood score 1-5.
+  Future<int?> detectMood(String content) async {
+    const prompt =
+        'Rate the emotional tone of the following text on a scale of 1 to 5 '
+        '(1=terrible, 2=bad, 3=okay, 4=good, 5=excellent). '
+        'Return ONLY a single digit, nothing else.\n\nText:\n';
+
+    try {
+      final response = await _chatModel.generateContent([
+        Content.text('$prompt$content'),
+      ]);
+      final text = response.text?.trim();
+      if (text == null) return null;
+      final score = int.tryParse(text.replaceAll(RegExp(r'[^1-5]'), ''));
+      if (score != null && score >= 1 && score <= 5) return score;
+      return null;
+    } catch (e) {
+      debugPrint('GeminiService detectMood failed: $e');
+      return null;
+    }
+  }
+
+  /// Summarize a journal entry in one sentence.
+  Future<String> generateJournalSummary(String content) async {
+    const prompt =
+        'Summarize this journal entry in one sentence (max 80 characters). '
+        'Be descriptive and specific, not generic. Match the language of the entry.\n\n';
+
+    try {
+      final response = await _chatModel.generateContent([
+        Content.text('$prompt$content'),
+      ]);
+      return response.text?.trim() ?? '';
+    } catch (e) {
+      debugPrint('GeminiService journal summary failed: $e');
+      return '';
+    }
+  }
+
   /// Generate a warm, supportive reflection on a journal entry.
   Future<String> generateJournalInsight(String content) async {
     const prompt = '''

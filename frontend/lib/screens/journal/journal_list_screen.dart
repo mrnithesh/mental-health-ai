@@ -9,6 +9,7 @@ import '../../models/journal_model.dart';
 import '../../providers/journal_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../widgets/animated_list_item.dart';
+import 'journal_editor_screen.dart' show JournalEditorArgs;
 
 class JournalListScreen extends ConsumerStatefulWidget {
   const JournalListScreen({super.key});
@@ -84,6 +85,30 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
     }
   }
 
+  void _showNewEntrySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (ctx) => _NewEntrySheet(
+        onFreeWrite: () {
+          Navigator.pop(ctx);
+          Navigator.pushNamed(context, AppRoutes.journalEditor);
+        },
+        onTemplate: (templateId) {
+          Navigator.pop(ctx);
+          Navigator.pushNamed(
+            context,
+            AppRoutes.journalEditor,
+            arguments: JournalEditorArgs(templateId: templateId),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final journalsAsync = ref.watch(filteredJournalsProvider);
@@ -137,10 +162,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                     _HeaderButton(
                       icon: Icons.add_rounded,
                       filled: true,
-                      onTap: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.journalEditor,
-                      ),
+                      onTap: () => _showNewEntrySheet(context),
                     ),
                   ],
                 ),
@@ -483,8 +505,30 @@ class _JournalCard extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // Content preview
-                          if (journal.title.isNotEmpty)
+                          // Content preview (AI summary if available)
+                          if (journal.summary != null &&
+                              journal.summary!.isNotEmpty)
+                            Row(
+                              children: [
+                                Icon(Icons.auto_awesome_rounded,
+                                    size: 11, color: AppColors.textTertiary),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    journal.summary!,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                      fontStyle: FontStyle.italic,
+                                      height: 1.4,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            )
+                          else if (journal.title.isNotEmpty)
                             Text(
                               journal.preview,
                               style: TextStyle(
@@ -575,5 +619,170 @@ class _JournalCard extends StatelessWidget {
     final score = int.tryParse(moodId);
     if (score == null) return null;
     return MoodEmojis.scoreToEmoji[score];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// New entry bottom sheet with template picker
+// ---------------------------------------------------------------------------
+
+class _NewEntrySheet extends StatelessWidget {
+  final VoidCallback onFreeWrite;
+  final ValueChanged<String> onTemplate;
+
+  const _NewEntrySheet({
+    required this.onFreeWrite,
+    required this.onTemplate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'New Entry',
+            style: tt.titleLarge?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Free write option
+          _SheetOption(
+            icon: Icons.edit_rounded,
+            iconColor: AppColors.primary,
+            title: 'Free Write',
+            subtitle: 'Write anything on your mind',
+            onTap: onFreeWrite,
+          ),
+          const SizedBox(height: 8),
+
+          // Divider with label
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Expanded(child: Divider(color: AppColors.surfaceVariant)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'Guided by NILAA',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Expanded(child: Divider(color: AppColors.surfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          // Template options
+          ...JournalTemplate.all.map((template) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _SheetOption(
+                  icon: null,
+                  emoji: template.icon,
+                  iconColor: AppColors.secondary,
+                  title: template.name,
+                  subtitle:
+                      '${template.description} -- ${template.prompts.length} prompts',
+                  onTap: () => onTemplate(template.id),
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetOption extends StatelessWidget {
+  final IconData? icon;
+  final String? emoji;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _SheetOption({
+    this.icon,
+    this.emoji,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.surfaceVariant),
+          ),
+          child: Row(
+            children: [
+              if (emoji != null)
+                Text(emoji!, style: const TextStyle(fontSize: 22))
+              else if (icon != null)
+                Icon(icon, size: 22, color: iconColor),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20, color: AppColors.textTertiary),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

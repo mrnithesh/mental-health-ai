@@ -60,9 +60,11 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const JournalListScreen());
 
       case journalEditor:
-        final journalId = settings.arguments as String?;
+        final args = settings.arguments is String
+            ? JournalEditorArgs(journalId: settings.arguments as String)
+            : settings.arguments as JournalEditorArgs?;
         return _fadeSlideRoute(
-          JournalEditorScreen(journalId: journalId),
+          JournalEditorScreen(args: args),
         );
 
       case moodTracker:
