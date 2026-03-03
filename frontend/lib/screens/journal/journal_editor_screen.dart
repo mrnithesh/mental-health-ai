@@ -5,10 +5,34 @@ import '../../config/constants.dart';
 import '../../config/theme.dart';
 import '../../providers/journal_provider.dart';
 
-class JournalEditorScreen extends ConsumerStatefulWidget {
-  final String? journalId;
+// ---------------------------------------------------------------------------
+// Route arguments
+// ---------------------------------------------------------------------------
 
-  const JournalEditorScreen({super.key, this.journalId});
+class JournalEditorArgs {
+  final String? journalId;
+  final String? templateId;
+  final String? prefillTitle;
+  final String? prefillContent;
+  final List<String>? prefillTags;
+
+  const JournalEditorArgs({
+    this.journalId,
+    this.templateId,
+    this.prefillTitle,
+    this.prefillContent,
+    this.prefillTags,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Editor screen
+// ---------------------------------------------------------------------------
+
+class JournalEditorScreen extends ConsumerStatefulWidget {
+  final JournalEditorArgs? args;
+
+  const JournalEditorScreen({super.key, this.args});
 
   @override
   ConsumerState<JournalEditorScreen> createState() =>
@@ -18,6 +42,7 @@ class JournalEditorScreen extends ConsumerStatefulWidget {
 class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
+  final _templateResponseController = TextEditingController();
   final _contentFocus = FocusNode();
   bool _insightExpanded = true;
 
@@ -25,12 +50,21 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.journalId != null) {
-        ref
-            .read(journalEditorProvider.notifier)
-            .loadJournal(widget.journalId!);
+      final notifier = ref.read(journalEditorProvider.notifier);
+      final args = widget.args;
+
+      if (args?.journalId != null) {
+        notifier.loadJournal(args!.journalId!);
+      } else if (args?.templateId != null) {
+        notifier.startTemplate(args!.templateId!);
+      } else if (args?.prefillContent != null) {
+        notifier.prefill(
+          title: args!.prefillTitle,
+          content: args.prefillContent,
+          tags: args.prefillTags,
+        );
       } else {
-        ref.read(journalEditorProvider.notifier).reset();
+        notifier.reset();
       }
     });
   }
@@ -39,26 +73,71 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _templateResponseController.dispose();
     _contentFocus.dispose();
     super.dispose();
   }
 
   void _syncControllers(JournalEditorState editorState) {
-    if (_titleController.text != editorState.title) {
-      _titleController.text = editorState.title;
-      _titleController.selection = TextSelection.fromPosition(
-        TextPosition(offset: editorState.title.length),
-      );
-    }
-    if (_contentController.text != editorState.content) {
-      _contentController.text = editorState.content;
-      _contentController.selection = TextSelection.fromPosition(
-        TextPosition(offset: editorState.content.length),
-      );
+    if (!editorState.isTemplateMode) {
+      if (_titleController.text != editorState.title) {
+        _titleController.text = editorState.title;
+        _titleController.selection = TextSelection.fromPosition(
+          TextPosition(offset: editorState.title.length),
+        );
+      }
+      if (_contentController.text != editorState.content) {
+        _contentController.text = editorState.content;
+        _contentController.selection = TextSelection.fromPosition(
+          TextPosition(offset: editorState.content.length),
+        );
+      }
+    } else {
+      final currentResponse = editorState.templateStep <
+              editorState.templateResponses.length
+          ? editorState.templateResponses[editorState.templateStep]
+          : '';
+      if (_templateResponseController.text != currentResponse) {
+        _templateResponseController.text = currentResponse;
+        _templateResponseController.selection = TextSelection.fromPosition(
+          TextPosition(offset: currentResponse.length),
+        );
+      }
     }
   }
 
   Future<void> _save() async {
+    final notifier = ref.read(journalEditorProvider.notifier);
+    final state = ref.read(journalEditorProvider);
+
+    // If no mood is set, auto-detect before saving
+    if ((state.moodId == null || state.moodId!.isEmpty) &&
+        state.content.trim().isNotEmpty &&
+        state.suggestedMoodId == null &&
+        !state.isDetectingMood) {
+      await notifier.autoDetectMood();
+      final updated = ref.read(journalEditorProvider);
+      if (updated.suggestedMoodId != null &&
+          updated.suggestedMoodId!.isNotEmpty) {
+        return; // UI will show suggestion, user decides
+      }
+    }
+
+    final success = await notifier.save();
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Journal saved'),
+          backgroundColor: AppColors.secondary,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveAfterMoodDecision() async {
     final success = await ref.read(journalEditorProvider.notifier).save();
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -106,7 +185,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final editorState = ref.watch(journalEditorProvider);
-    final isEditing = widget.journalId != null;
+    final isEditing = widget.args?.journalId != null;
     final tt = Theme.of(context).textTheme;
 
     _syncControllers(editorState);
@@ -129,10 +208,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
           bottom: false,
           child: Column(
             children: [
-              // Custom app bar
               _buildAppBar(editorState, isEditing, tt),
-
-              // Gradient accent strip
               Container(
                 height: 2,
                 decoration: const BoxDecoration(
@@ -141,124 +217,29 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
                   ),
                 ),
               ),
-
-              // Body
               Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Date
-                      Text(
-                        _formatDate(editorState.journalId != null
-                            ? DateTime.now()
-                            : DateTime.now()),
-                        style: tt.bodySmall
-                            ?.copyWith(color: AppColors.textTertiary),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Title field
-                      TextField(
-                        controller: _titleController,
-                        maxLength: AppConstants.journalTitleMaxLength,
-                        textCapitalization: TextCapitalization.sentences,
-                        style: tt.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.3,
-                          color: AppColors.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Give it a title...',
-                          hintStyle: tt.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textTertiary.withValues(alpha: 0.5),
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          counterText: '',
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onChanged: (v) => ref
-                            .read(journalEditorProvider.notifier)
-                            .updateTitle(v),
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Mood picker
-                      _MoodPicker(
-                        selectedMoodId: editorState.moodId,
-                        onSelect: (id) => ref
-                            .read(journalEditorProvider.notifier)
-                            .setMood(id),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Divider
-                      Divider(
-                        color: AppColors.surfaceVariant,
-                        height: 1,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Content field
-                      TextField(
-                        controller: _contentController,
-                        focusNode: _contentFocus,
-                        maxLines: null,
-                        minLines: 10,
-                        maxLength: AppConstants.journalContentMaxLength,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                        textCapitalization: TextCapitalization.sentences,
-                        style: tt.bodyLarge?.copyWith(
-                          height: 1.7,
-                          color: AppColors.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Write your thoughts...',
-                          hintStyle: TextStyle(
-                            color: AppColors.textTertiary.withValues(alpha: 0.6),
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          counterText: '',
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onChanged: (v) => ref
-                            .read(journalEditorProvider.notifier)
-                            .updateContent(v),
-                      ),
-
-                      // AI Insight card
-                      if (editorState.aiInsight != null &&
-                          editorState.aiInsight!.isNotEmpty)
-                        _InsightCard(
-                          insight: editorState.aiInsight!,
-                          expanded: _insightExpanded,
-                          onToggle: () => setState(
-                              () => _insightExpanded = !_insightExpanded),
-                        ),
-                    ],
-                  ),
-                ),
+                child: editorState.isTemplateMode
+                    ? _buildTemplateBody(editorState, tt)
+                    : _buildFreeWriteBody(editorState, tt),
               ),
-
-              // Error bar
-              if (editorState.error != null) _ErrorBar(editorState: editorState, ref: ref),
-
-              // Bottom toolbar
-              _BottomToolbar(
-                editorState: editorState,
-                onGenerateInsight: () =>
-                    ref.read(journalEditorProvider.notifier).generateInsight(),
-              ),
+              if (editorState.error != null)
+                _ErrorBar(editorState: editorState, ref: ref),
+              editorState.isTemplateMode
+                  ? _TemplateToolbar(
+                      editorState: editorState,
+                      onNext: () => ref
+                          .read(journalEditorProvider.notifier)
+                          .nextTemplateStep(),
+                      onBack: () => ref
+                          .read(journalEditorProvider.notifier)
+                          .previousTemplateStep(),
+                    )
+                  : _BottomToolbar(
+                      editorState: editorState,
+                      onGenerateInsight: () => ref
+                          .read(journalEditorProvider.notifier)
+                          .generateInsight(),
+                    ),
             ],
           ),
         ),
@@ -266,8 +247,268 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
     );
   }
 
+  // -- Free write body --
+
+  Widget _buildFreeWriteBody(JournalEditorState editorState, TextTheme tt) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _formatDate(DateTime.now()),
+            style: tt.bodySmall?.copyWith(color: AppColors.textTertiary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _titleController,
+            maxLength: AppConstants.journalTitleMaxLength,
+            textCapitalization: TextCapitalization.sentences,
+            style: tt.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              height: 1.3,
+              color: AppColors.textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Give it a title...',
+              hintStyle: tt.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.textTertiary.withValues(alpha: 0.5),
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              counterText: '',
+              contentPadding: EdgeInsets.zero,
+            ),
+            onChanged: (v) =>
+                ref.read(journalEditorProvider.notifier).updateTitle(v),
+          ),
+          const SizedBox(height: 4),
+
+          // Mood suggestion chip
+          if (editorState.suggestedMoodId != null &&
+              editorState.suggestedMoodId!.isNotEmpty &&
+              (editorState.moodId == null || editorState.moodId!.isEmpty))
+            _MoodSuggestion(
+              suggestedMoodId: editorState.suggestedMoodId!,
+              onAccept: () {
+                ref.read(journalEditorProvider.notifier).acceptSuggestedMood();
+                _saveAfterMoodDecision();
+              },
+              onDismiss: () {
+                ref.read(journalEditorProvider.notifier).dismissSuggestedMood();
+                _saveAfterMoodDecision();
+              },
+            ),
+
+          // Mood detecting indicator
+          if (editorState.isDetectingMood)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'NILAA is reading your mood...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textTertiary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          _MoodPicker(
+            selectedMoodId: editorState.moodId,
+            onSelect: (id) =>
+                ref.read(journalEditorProvider.notifier).setMood(id),
+          ),
+          const SizedBox(height: 16),
+          Divider(color: AppColors.surfaceVariant, height: 1),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _contentController,
+            focusNode: _contentFocus,
+            maxLines: null,
+            minLines: 10,
+            maxLength: AppConstants.journalContentMaxLength,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            textCapitalization: TextCapitalization.sentences,
+            style: tt.bodyLarge?.copyWith(
+              height: 1.7,
+              color: AppColors.textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Write your thoughts...',
+              hintStyle: TextStyle(
+                color: AppColors.textTertiary.withValues(alpha: 0.6),
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              counterText: '',
+              contentPadding: EdgeInsets.zero,
+            ),
+            onChanged: (v) =>
+                ref.read(journalEditorProvider.notifier).updateContent(v),
+          ),
+          // AI summary
+          if (editorState.summary != null &&
+              editorState.summary!.isNotEmpty)
+            _SummaryChip(summary: editorState.summary!),
+
+          if (editorState.aiInsight != null &&
+              editorState.aiInsight!.isNotEmpty)
+            _InsightCard(
+              insight: editorState.aiInsight!,
+              expanded: _insightExpanded,
+              onToggle: () =>
+                  setState(() => _insightExpanded = !_insightExpanded),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // -- Template guided body --
+
+  Widget _buildTemplateBody(JournalEditorState editorState, TextTheme tt) {
+    final template = editorState.template;
+    if (template == null) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Template header
+          Row(
+            children: [
+              Text(template.icon, style: const TextStyle(fontSize: 24)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      template.name,
+                      style: tt.titleMedium?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Step ${editorState.templateStep + 1} of ${template.prompts.length}',
+                      style: tt.bodySmall?.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Step progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (editorState.templateStep + 1) / template.prompts.length,
+              backgroundColor: AppColors.surfaceVariant,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.primary),
+              minHeight: 4,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // NILAA prompt bubble
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.secondary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: AppColors.secondary.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.auto_awesome_rounded,
+                    size: 18, color: AppColors.secondary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    editorState.currentPrompt ?? '',
+                    style: tt.bodyLarge?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Response input
+          TextField(
+            controller: _templateResponseController,
+            maxLines: null,
+            minLines: 6,
+            textCapitalization: TextCapitalization.sentences,
+            style: tt.bodyLarge?.copyWith(
+              height: 1.7,
+              color: AppColors.textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Your response...',
+              hintStyle: TextStyle(
+                color: AppColors.textTertiary.withValues(alpha: 0.6),
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              contentPadding: EdgeInsets.zero,
+            ),
+            onChanged: (v) => ref
+                .read(journalEditorProvider.notifier)
+                .updateTemplateResponse(v),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAppBar(
       JournalEditorState editorState, bool isEditing, TextTheme tt) {
+    String title;
+    if (editorState.isTemplateMode) {
+      title = editorState.template?.name ?? 'Guided Entry';
+    } else {
+      title = isEditing ? 'Edit Entry' : 'New Entry';
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
@@ -279,23 +520,24 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
           ),
           Expanded(
             child: Text(
-              isEditing ? 'Edit Entry' : 'New Entry',
+              title,
               style: tt.titleMedium?.copyWith(color: AppColors.textPrimary),
               textAlign: TextAlign.center,
             ),
           ),
-          if (isEditing)
+          if (isEditing && !editorState.isTemplateMode)
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded),
               onPressed: _delete,
               color: AppColors.textSecondary,
               tooltip: 'Delete',
             ),
-          _SaveButton(
-            isSaving: editorState.isSaving,
-            hasChanges: editorState.hasChanges,
-            onSave: _save,
-          ),
+          if (!editorState.isTemplateMode)
+            _SaveButton(
+              isSaving: editorState.isSaving,
+              hasChanges: editorState.hasChanges,
+              onSave: _save,
+            ),
         ],
       ),
     );
@@ -326,6 +568,136 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
 }
 
 // ---------------------------------------------------------------------------
+// Mood suggestion chip
+// ---------------------------------------------------------------------------
+
+class _MoodSuggestion extends StatelessWidget {
+  final String suggestedMoodId;
+  final VoidCallback onAccept;
+  final VoidCallback onDismiss;
+
+  const _MoodSuggestion({
+    required this.suggestedMoodId,
+    required this.onAccept,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final score = int.tryParse(suggestedMoodId);
+    final emoji = score != null ? MoodEmojis.scoreToEmoji[score] : null;
+    final label = score != null ? MoodEmojis.scoreToLabel[score] : null;
+    if (emoji == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.auto_awesome_rounded,
+              size: 16, color: AppColors.accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'NILAA thinks you\'re feeling $emoji $label',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onAccept,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: const Text(
+                'Accept',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: onDismiss,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text(
+                'Skip',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Summary chip
+// ---------------------------------------------------------------------------
+
+class _SummaryChip extends StatelessWidget {
+  final String summary;
+
+  const _SummaryChip({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.summarize_rounded,
+                size: 15, color: AppColors.accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                summary,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Save button
 // ---------------------------------------------------------------------------
 
@@ -344,30 +716,28 @@ class _SaveButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 4),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        child: TextButton(
-          onPressed: isSaving ? null : onSave,
-          style: TextButton.styleFrom(
-            foregroundColor: hasChanges ? AppColors.primary : AppColors.textTertiary,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          ),
-          child: isSaving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                )
-              : Text(
-                  'Save',
-                  style: TextStyle(
-                    fontWeight: hasChanges ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                ),
+      child: TextButton(
+        onPressed: isSaving ? null : onSave,
+        style: TextButton.styleFrom(
+          foregroundColor:
+              hasChanges ? AppColors.primary : AppColors.textTertiary,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
+        child: isSaving
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              )
+            : Text(
+                'Save',
+                style: TextStyle(
+                  fontWeight: hasChanges ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
       ),
     );
   }
@@ -538,8 +908,7 @@ class _ErrorBar extends StatelessWidget {
           Expanded(
             child: Text(
               editorState.error!,
-              style:
-                  const TextStyle(color: AppColors.error, fontSize: 12),
+              style: const TextStyle(color: AppColors.error, fontSize: 12),
             ),
           ),
           IconButton(
@@ -556,7 +925,7 @@ class _ErrorBar extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Bottom toolbar
+// Bottom toolbar (free write mode)
 // ---------------------------------------------------------------------------
 
 class _BottomToolbar extends StatelessWidget {
@@ -596,11 +965,92 @@ class _BottomToolbar extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
             ),
             const Spacer(),
-            // Ask NILAA button
             _AskNilaaButton(
               isGenerating: editorState.isGeneratingInsight,
               hasContent: editorState.content.trim().isNotEmpty,
               onTap: onGenerateInsight,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Template toolbar (guided mode)
+// ---------------------------------------------------------------------------
+
+class _TemplateToolbar extends StatelessWidget {
+  final JournalEditorState editorState;
+  final VoidCallback onNext;
+  final VoidCallback onBack;
+
+  const _TemplateToolbar({
+    required this.editorState,
+    required this.onNext,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isFirst = editorState.templateStep == 0;
+    final isLast = editorState.isLastTemplateStep;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(color: AppColors.surfaceVariant, width: 1),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            if (!isFirst)
+              TextButton.icon(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: const Text('Back'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                ),
+              )
+            else
+              const SizedBox.shrink(),
+            const Spacer(),
+            GestureDetector(
+              onTap: onNext,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primary, AppColors.primaryDark],
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isLast ? 'Finish' : 'Next',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (!isLast) ...[
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_forward_rounded,
+                          size: 18, color: Colors.white),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -637,9 +1087,8 @@ class _AskNilaaButton extends StatelessWidget {
                   colors: [AppColors.secondary, AppColors.secondaryDark],
                 )
               : null,
-          color: hasContent && !isGenerating
-              ? null
-              : AppColors.surfaceVariant,
+          color:
+              hasContent && !isGenerating ? null : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
         child: Row(
