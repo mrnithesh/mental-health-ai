@@ -34,7 +34,7 @@ enum AppGradientType {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppColors.primary.withOpacity(0.06),
+            AppColors.primary.withValues(alpha: 0.06),
             AppColors.background,
           ],
         );
@@ -43,7 +43,7 @@ enum AppGradientType {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppColors.secondary.withOpacity(0.06),
+            AppColors.secondary.withValues(alpha: 0.06),
             AppColors.background,
           ],
         );
@@ -58,8 +58,8 @@ enum AppGradientType {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.accent.withOpacity(0.15),
-            AppColors.secondary.withOpacity(0.08),
+            AppColors.accent.withValues(alpha: 0.15),
+            AppColors.secondary.withValues(alpha: 0.08),
           ],
         );
       case AppGradientType.calmBackground:
@@ -67,9 +67,9 @@ enum AppGradientType {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppColors.primary.withOpacity(0.04),
+            AppColors.primary.withValues(alpha: 0.04),
             AppColors.background,
-            AppColors.secondary.withOpacity(0.03),
+            AppColors.secondary.withValues(alpha: 0.03),
           ],
         );
     }

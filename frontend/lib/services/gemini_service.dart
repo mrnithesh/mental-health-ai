@@ -75,6 +75,27 @@ Guidelines:
 
   Future<LiveSession> connectLive() => _voiceModel.connect();
 
+  /// Generate a warm, supportive reflection on a journal entry.
+  Future<String> generateJournalInsight(String content) async {
+    const prompt = '''
+Read the following journal entry and provide a brief, warm, supportive reflection as NILAA (a caring friend). 
+Keep it to 2-3 sentences. Be empathetic, validate their feelings, and if appropriate offer a gentle positive reframe or encouragement. 
+Do not repeat what they wrote. Do not diagnose or prescribe. Match the language of the journal entry.
+
+Journal entry:
+''';
+
+    try {
+      final response = await _chatModel.generateContent([
+        Content.text('$prompt$content'),
+      ]);
+      return response.text ?? 'I enjoyed reading your thoughts.';
+    } catch (e) {
+      debugPrint('GeminiService journal insight failed: $e');
+      rethrow;
+    }
+  }
+
   /// Quick health check: sends a trivial prompt to verify the API is reachable.
   Future<bool> isAvailable() async {
     try {

@@ -141,20 +141,24 @@ class FirestoreService {
 
   /// Create a new journal entry
   Future<JournalModel> createJournal({
+    String title = '',
     required String content,
     String? moodId,
+    List<String> tags = const [],
   }) async {
     final now = DateTime.now();
     final docRef = _journalsCollection.doc();
-    
+
     final journal = JournalModel(
       id: docRef.id,
+      title: title,
       content: content,
       moodId: moodId,
+      tags: tags,
       createdAt: now,
       updatedAt: now,
     );
-    
+
     await docRef.set(journal.toFirestore());
     return journal;
   }
@@ -162,18 +166,22 @@ class FirestoreService {
   /// Update a journal entry
   Future<void> updateJournal({
     required String id,
+    String? title,
     String? content,
     String? moodId,
     String? aiInsight,
+    List<String>? tags,
   }) async {
     final updates = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
     };
-    
+
+    if (title != null) updates['title'] = title;
     if (content != null) updates['content'] = content;
     if (moodId != null) updates['moodId'] = moodId;
     if (aiInsight != null) updates['aiInsight'] = aiInsight;
-    
+    if (tags != null) updates['tags'] = tags;
+
     await _journalsCollection.doc(id).update(updates);
   }
 
