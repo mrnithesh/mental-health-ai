@@ -265,8 +265,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     onPressed: () async {
                       setState(() => _isSummarizing = true);
                       setSheetState(() {});
+                      Navigator.pop(ctx);
                       await _summarizeAndNavigate();
-                      if (ctx.mounted) Navigator.pop(ctx);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -306,7 +306,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           _isSummarizing = false;
           _savedAsJournal = true;
         });
-        Navigator.pushNamed(
+        Navigator.pushReplacementNamed(
           context,
           AppRoutes.journalEditor,
           arguments: JournalEditorArgs(
@@ -372,6 +372,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ),
       child: Row(
         children: [
+          if (widget.journalMode && Navigator.canPop(context)) ...[
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Icon(
+                Icons.arrow_back_rounded,
+                color: _ChatPalette.textPrimary(isDark),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
           Container(
             width: 36,
             height: 36,
@@ -652,7 +663,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               child: InkWell(
                 onTap: _canSend
                     ? _sendMessage
-                    : () => Navigator.of(context).pushNamed(AppRoutes.voiceChat),
+                    : () => Navigator.of(context).pushNamed(
+                          AppRoutes.voiceChat,
+                          arguments: widget.journalMode
+                              ? {'journalMode': true}
+                              : null,
+                        ),
                 borderRadius: BorderRadius.circular(22),
                 child: Padding(
                   padding: const EdgeInsets.all(12),

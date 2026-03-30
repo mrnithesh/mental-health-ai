@@ -377,8 +377,8 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                     onPressed: () async {
                       setState(() => _isSummarizing = true);
                       setSheetState(() {});
+                      Navigator.pop(ctx);
                       await _summarizeAndNavigate();
-                      if (ctx.mounted) Navigator.pop(ctx);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -417,7 +417,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
           _isSummarizing = false;
           _savedAsJournal = true;
         });
-        Navigator.pushNamed(
+        Navigator.pushReplacementNamed(
           context,
           AppRoutes.journalEditor,
           arguments: JournalEditorArgs(
@@ -550,11 +550,15 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
               textAlign: TextAlign.center,
             ),
           ),
-          if (widget.journalMode && _hasEnoughTranscript && !_savedAsJournal)
+          if (widget.journalMode && !_savedAsJournal)
             IconButton(
               icon: const Icon(Icons.save_rounded),
-              onPressed: _isSummarizing ? null : _showJournalPrompt,
-              color: AppColors.primary,
+              onPressed: _hasEnoughTranscript && !_isSummarizing
+                  ? _showJournalPrompt
+                  : null,
+              color: _hasEnoughTranscript
+                  ? AppColors.primary
+                  : AppColors.textTertiary,
               tooltip: 'Save as Journal',
             )
           else
