@@ -89,6 +89,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
@@ -722,118 +723,120 @@ class _NewEntrySheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final maxSheetHeight = MediaQuery.of(context).size.height * 0.85;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(2),
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxSheetHeight),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'New Entry',
-            style: tt.titleLarge?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 16),
+              const SizedBox(height: 20),
+              Text(
+                'New Entry',
+                style: tt.titleLarge?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
 
-          // Free write option
-          _SheetOption(
-            icon: Icons.edit_rounded,
-            iconColor: AppColors.primary,
-            title: 'Free Write',
-            subtitle: 'Write anything on your mind',
-            onTap: onFreeWrite,
-          ),
-          const SizedBox(height: 8),
+              _SheetOption(
+                icon: Icons.edit_rounded,
+                iconColor: AppColors.primary,
+                title: 'Free Write',
+                subtitle: 'Write anything on your mind',
+                onTap: onFreeWrite,
+              ),
+              const SizedBox(height: 8),
 
-          // Divider with label
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: AppColors.surfaceVariant)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'Guided by NILAA',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textTertiary,
-                      fontWeight: FontWeight.w500,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(child: Divider(color: AppColors.surfaceVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'Guided by NILAA',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textTertiary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
-                  ),
+                    Expanded(child: Divider(color: AppColors.surfaceVariant)),
+                  ],
                 ),
-                Expanded(child: Divider(color: AppColors.surfaceVariant)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
+              ),
+              const SizedBox(height: 4),
 
-          // Template options
-          ...JournalTemplate.all.map((template) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _SheetOption(
-                  icon: null,
-                  emoji: template.icon,
-                  iconColor: AppColors.secondary,
-                  title: template.name,
-                  subtitle:
-                      '${template.description} -- ${template.prompts.length} prompts',
-                  onTap: () => onTemplate(template.id),
-                ),
-              )),
-
-          // Chat to journal divider
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: AppColors.surfaceVariant)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'From a Conversation',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textTertiary,
-                      fontWeight: FontWeight.w500,
+              ...JournalTemplate.all.map((template) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _SheetOption(
+                      icon: null,
+                      emoji: template.icon,
+                      iconColor: AppColors.secondary,
+                      title: template.name,
+                      subtitle:
+                          '${template.description} -- ${template.prompts.length} prompts',
+                      onTap: () => onTemplate(template.id),
                     ),
-                  ),
+                  )),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(child: Divider(color: AppColors.surfaceVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'From a Conversation',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textTertiary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: AppColors.surfaceVariant)),
+                  ],
                 ),
-                Expanded(child: Divider(color: AppColors.surfaceVariant)),
-              ],
-            ),
+              ),
+              const SizedBox(height: 4),
+              _SheetOption(
+                icon: Icons.chat_bubble_outline_rounded,
+                iconColor: AppColors.primary,
+                title: 'Chat & Journal',
+                subtitle: 'Text with NILAA, then save it as a journal',
+                onTap: onChatJournal,
+              ),
+              const SizedBox(height: 8),
+              _SheetOption(
+                icon: Icons.mic_rounded,
+                iconColor: AppColors.secondary,
+                title: 'Voice & Journal',
+                subtitle: 'Talk to NILAA by voice, then save it',
+                onTap: onVoiceJournal,
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          _SheetOption(
-            icon: Icons.chat_bubble_outline_rounded,
-            iconColor: AppColors.primary,
-            title: 'Chat & Journal',
-            subtitle: 'Text with NILAA, then save it as a journal',
-            onTap: onChatJournal,
-          ),
-          const SizedBox(height: 8),
-          _SheetOption(
-            icon: Icons.mic_rounded,
-            iconColor: AppColors.secondary,
-            title: 'Voice & Journal',
-            subtitle: 'Talk to NILAA by voice, then save it',
-            onTap: onVoiceJournal,
-          ),
-        ],
+        ),
       ),
     );
   }
