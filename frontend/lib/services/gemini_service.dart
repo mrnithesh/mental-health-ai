@@ -135,6 +135,76 @@ Journal entry:
     }
   }
 
+  /// Transform a chat/voice conversation into a first-person journal entry.
+  /// Returns a record with title and body. Falls back to raw transcript on error.
+  Future<({String title, String body})> summarizeConversation(
+      String formattedTranscript) async {
+    const prompt = '''
+Transform this conversation into a first-person journal entry.
+Rules:
+- Write as if the user is journaling about what they discussed
+- Keep their voice, language, and tone (Tamil/English/Tanglish as used)
+- Focus on feelings, realizations, and takeaways
+- Do NOT quote NILAA directly -- weave insights naturally
+- Clean up any transcript fragments or errors
+- Aim for 150-300 words
+- Return in this exact format:
+  TITLE: <short descriptive title, max 60 chars>
+  ---
+  <journal body>
+
+Conversation:
+''';
+
+    try {
+      final response = await _chatModel.generateContent([
+        Content.text('$prompt$formattedTranscript'),
+      ]);
+      final text = response.text?.trim();
+      if (text == null || text.isEmpty) {
+        return _fallbackSummary(formattedTranscript);
+      }
+
+      final separatorIndex = text.indexOf('---');
+      if (separatorIndex == -1) {
+        return _fallbackSummary(formattedTranscript, body: text);
+      }
+
+      final titleSection = text.substring(0, separatorIndex).trim();
+      final body = text.substring(separatorIndex + 3).trim();
+
+      var title = titleSection;
+      if (titleSection.toUpperCase().startsWith('TITLE:')) {
+        title = titleSection.substring(6).trim();
+      }
+
+      if (title.isEmpty) title = _fallbackTitle();
+      if (body.isEmpty) return _fallbackSummary(formattedTranscript);
+
+      return (title: title, body: body);
+    } catch (e) {
+      debugPrint('GeminiService summarizeConversation failed: $e');
+      return _fallbackSummary(formattedTranscript);
+    }
+  }
+
+  ({String title, String body}) _fallbackSummary(String transcript,
+      {String? body}) {
+    return (
+      title: _fallbackTitle(),
+      body: body ?? transcript,
+    );
+  }
+
+  String _fallbackTitle() {
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return 'Chat with NILAA -- ${months[now.month - 1]} ${now.day}';
+  }
+
   /// Quick health check: sends a trivial prompt to verify the API is reachable.
   Future<bool> isAvailable() async {
     try {

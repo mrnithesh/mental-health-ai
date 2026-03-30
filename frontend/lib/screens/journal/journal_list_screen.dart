@@ -105,6 +105,22 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
             arguments: JournalEditorArgs(templateId: templateId),
           );
         },
+        onChatJournal: () {
+          Navigator.pop(ctx);
+          Navigator.pushNamed(
+            context,
+            AppRoutes.chat,
+            arguments: {'journalMode': true},
+          );
+        },
+        onVoiceJournal: () {
+          Navigator.pop(ctx);
+          Navigator.pushNamed(
+            context,
+            AppRoutes.voiceChat,
+            arguments: {'journalMode': true},
+          );
+        },
       ),
     );
   }
@@ -223,7 +239,30 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                     : const SizedBox.shrink(),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+
+              // Filter chips
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    _FilterChip(
+                      label: 'All',
+                      isSelected: ref.watch(journalFilterProvider) == 'all',
+                      onTap: () => ref.read(journalFilterProvider.notifier).state = 'all',
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: 'Highlights',
+                      icon: Icons.star_rounded,
+                      isSelected: ref.watch(journalFilterProvider) == 'highlights',
+                      onTap: () => ref.read(journalFilterProvider.notifier).state = 'highlights',
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
 
               // Journal list
               Expanded(
@@ -232,6 +271,9 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                     if (journals.isEmpty) {
                       if (ref.watch(journalSearchProvider).isNotEmpty) {
                         return _buildNoResults(tt);
+                      }
+                      if (ref.watch(journalFilterProvider) == 'highlights') {
+                        return _buildEmptyHighlights(tt);
                       }
                       return const _EmptyState();
                     }
@@ -271,6 +313,12 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                                 AppRoutes.journalEditor,
                                 arguments: journal.id,
                               ),
+                              onToggleHighlight: () {
+                                ref.read(firestoreServiceProvider).updateJournal(
+                                  id: journal.id,
+                                  isHighlight: !journal.isHighlight,
+                                );
+                              },
                             ),
                           ),
                         );
@@ -302,6 +350,27 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyHighlights(TextTheme tt) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.star_outline_rounded,
+              size: 48, color: AppColors.accent.withValues(alpha: 0.5)),
+          const SizedBox(height: 16),
+          Text('No highlights yet',
+              style: tt.titleSmall?.copyWith(color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          Text(
+            'Star the entries that matter most.\nThey\'ll live here.',
+            style: tt.bodySmall?.copyWith(color: AppColors.textTertiary),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -436,8 +505,13 @@ class _EmptyState extends StatelessWidget {
 class _JournalCard extends StatelessWidget {
   final JournalModel journal;
   final VoidCallback onTap;
+  final VoidCallback onToggleHighlight;
 
-  const _JournalCard({required this.journal, required this.onTap});
+  const _JournalCard({
+    required this.journal,
+    required this.onTap,
+    required this.onToggleHighlight,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -467,9 +541,11 @@ class _JournalCard extends StatelessWidget {
                   Container(
                     width: 4,
                     decoration: BoxDecoration(
-                      color: journal.aiInsight != null
-                          ? AppColors.secondary
-                          : AppColors.primary,
+                      color: journal.isHighlight
+                          ? AppColors.accent
+                          : journal.aiInsight != null
+                              ? AppColors.secondary
+                              : AppColors.primary,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(AppRadius.md),
                         bottomLeft: Radius.circular(AppRadius.md),
@@ -500,6 +576,21 @@ class _JournalCard extends StatelessWidget {
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: onToggleHighlight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Icon(
+                                    journal.isHighlight
+                                        ? Icons.star_rounded
+                                        : Icons.star_outline_rounded,
+                                    size: 18,
+                                    color: journal.isHighlight
+                                        ? AppColors.accent
+                                        : AppColors.textTertiary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -570,34 +661,23 @@ class _JournalCard extends StatelessWidget {
                                 ),
                               ),
                               const Spacer(),
+                              if (journal.tags.contains('chat-journal'))
+                                _OriginBadge(
+                                  icon: Icons.chat_bubble_outline_rounded,
+                                  label: 'From Chat',
+                                  color: AppColors.primary,
+                                ),
+                              if (journal.tags.contains('voice-journal'))
+                                _OriginBadge(
+                                  icon: Icons.mic_rounded,
+                                  label: 'From Voice',
+                                  color: AppColors.secondary,
+                                ),
                               if (journal.aiInsight != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.secondary
-                                        .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.auto_awesome_rounded,
-                                          size: 11,
-                                          color: AppColors.secondary),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        'Insight',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: AppColors.secondary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                _OriginBadge(
+                                  icon: Icons.auto_awesome_rounded,
+                                  label: 'Insight',
+                                  color: AppColors.secondary,
                                 ),
                             ],
                           ),
@@ -629,10 +709,14 @@ class _JournalCard extends StatelessWidget {
 class _NewEntrySheet extends StatelessWidget {
   final VoidCallback onFreeWrite;
   final ValueChanged<String> onTemplate;
+  final VoidCallback onChatJournal;
+  final VoidCallback onVoiceJournal;
 
   const _NewEntrySheet({
     required this.onFreeWrite,
     required this.onTemplate,
+    required this.onChatJournal,
+    required this.onVoiceJournal,
   });
 
   @override
@@ -711,6 +795,44 @@ class _NewEntrySheet extends StatelessWidget {
                   onTap: () => onTemplate(template.id),
                 ),
               )),
+
+          // Chat to journal divider
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Expanded(child: Divider(color: AppColors.surfaceVariant)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'From a Conversation',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Expanded(child: Divider(color: AppColors.surfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          _SheetOption(
+            icon: Icons.chat_bubble_outline_rounded,
+            iconColor: AppColors.primary,
+            title: 'Chat & Journal',
+            subtitle: 'Text with NILAA, then save it as a journal',
+            onTap: onChatJournal,
+          ),
+          const SizedBox(height: 8),
+          _SheetOption(
+            icon: Icons.mic_rounded,
+            iconColor: AppColors.secondary,
+            title: 'Voice & Journal',
+            subtitle: 'Talk to NILAA by voice, then save it',
+            onTap: onVoiceJournal,
+          ),
         ],
       ),
     );
@@ -781,6 +903,108 @@ class _SheetOption extends StatelessWidget {
                   size: 20, color: AppColors.textTertiary),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Origin badge (From Chat / From Voice / Insight)
+// ---------------------------------------------------------------------------
+
+class _OriginBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _OriginBadge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Filter chip
+// ---------------------------------------------------------------------------
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : AppColors.surfaceVariant.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.4)
+                : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14,
+                  color: isSelected ? AppColors.primary : AppColors.textTertiary),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );

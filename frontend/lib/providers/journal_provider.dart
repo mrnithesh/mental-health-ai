@@ -23,19 +23,32 @@ final journalProvider =
 /// Search query state
 final journalSearchProvider = StateProvider<String>((ref) => '');
 
-/// Filtered journals based on search query
+/// Filter: 'all' or 'highlights'
+final journalFilterProvider = StateProvider<String>((ref) => 'all');
+
+/// Filtered journals based on search query and highlight filter
 final filteredJournalsProvider =
     Provider<AsyncValue<List<JournalModel>>>((ref) {
   final journalsAsync = ref.watch(journalsProvider);
   final query = ref.watch(journalSearchProvider).toLowerCase().trim();
+  final filter = ref.watch(journalFilterProvider);
 
   return journalsAsync.whenData((journals) {
-    if (query.isEmpty) return journals;
-    return journals.where((j) {
-      return j.title.toLowerCase().contains(query) ||
-          j.content.toLowerCase().contains(query) ||
-          j.tags.any((t) => t.toLowerCase().contains(query));
-    }).toList();
+    var result = journals;
+
+    if (filter == 'highlights') {
+      result = result.where((j) => j.isHighlight).toList();
+    }
+
+    if (query.isNotEmpty) {
+      result = result.where((j) {
+        return j.title.toLowerCase().contains(query) ||
+            j.content.toLowerCase().contains(query) ||
+            j.tags.any((t) => t.toLowerCase().contains(query));
+      }).toList();
+    }
+
+    return result;
   });
 });
 
@@ -50,6 +63,7 @@ class JournalEditorState {
   final String? moodId;
   final String? aiInsight;
   final String? summary;
+  final bool isHighlight;
   final List<String> tags;
   final bool isSaving;
   final bool isGeneratingInsight;
@@ -72,6 +86,7 @@ class JournalEditorState {
     this.moodId,
     this.aiInsight,
     this.summary,
+    this.isHighlight = false,
     this.tags = const [],
     this.isSaving = false,
     this.isGeneratingInsight = false,
@@ -108,6 +123,7 @@ class JournalEditorState {
     String? moodId,
     String? aiInsight,
     String? summary,
+    bool? isHighlight,
     List<String>? tags,
     bool? isSaving,
     bool? isGeneratingInsight,
@@ -126,6 +142,7 @@ class JournalEditorState {
       moodId: moodId ?? this.moodId,
       aiInsight: aiInsight ?? this.aiInsight,
       summary: summary ?? this.summary,
+      isHighlight: isHighlight ?? this.isHighlight,
       tags: tags ?? this.tags,
       isSaving: isSaving ?? this.isSaving,
       isGeneratingInsight: isGeneratingInsight ?? this.isGeneratingInsight,
@@ -161,6 +178,7 @@ class JournalEditorNotifier extends StateNotifier<JournalEditorState> {
         moodId: journal.moodId,
         aiInsight: journal.aiInsight,
         summary: journal.summary,
+        isHighlight: journal.isHighlight,
         tags: journal.tags,
       );
     }
@@ -190,6 +208,23 @@ class JournalEditorNotifier extends StateNotifier<JournalEditorState> {
       current.add(tag);
     }
     state = state.copyWith(tags: current, hasChanges: true);
+  }
+
+  // -- Highlight toggle --
+
+  Future<void> toggleHighlight() async {
+    final newValue = !state.isHighlight;
+    state = state.copyWith(isHighlight: newValue);
+    if (state.journalId != null) {
+      try {
+        await _firestoreService.updateJournal(
+          id: state.journalId!,
+          isHighlight: newValue,
+        );
+      } catch (e) {
+        debugPrint('Failed to toggle highlight: $e');
+      }
+    }
   }
 
   // -- Mood auto-detection --
