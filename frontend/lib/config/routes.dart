@@ -12,12 +12,15 @@ import '../screens/journal/journal_list_screen.dart';
 import '../screens/journal/journal_editor_screen.dart';
 import '../screens/mood/mood_tracker_screen.dart';
 import '../screens/mood/mood_history_screen.dart';
+import '../screens/onboarding/voice_setup_screen.dart';
+import '../screens/settings/settings_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
   static const String phoneAuth = '/phone-auth';
+  static const String voiceSetup = '/voice-setup';
   static const String main = '/main';
   static const String home = '/home';
   static const String chat = '/chat';
@@ -26,6 +29,7 @@ class AppRoutes {
   static const String journalEditor = '/journal/editor';
   static const String moodTracker = '/mood';
   static const String moodHistory = '/mood/history';
+  static const String settingsScreen = '/settings';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -41,8 +45,14 @@ class AppRoutes {
       case phoneAuth:
         return MaterialPageRoute(builder: (_) => const PhoneAuthScreen());
 
+      case voiceSetup:
+        return _fadeSlideRoute(const VoiceSetupScreen());
+
       case main:
         return MaterialPageRoute(builder: (_) => const MainShell());
+
+      case settingsScreen:
+        return _fadeSlideRoute(const SettingsScreen());
 
       case home:
         return MaterialPageRoute(builder: (_) => const HomeScreen());
@@ -51,8 +61,13 @@ class AppRoutes {
         final chatArgs = settings.arguments;
         final chatJournalMode =
             chatArgs is Map && chatArgs['journalMode'] == true;
+        final chatConversationId =
+            chatArgs is Map ? chatArgs['conversationId'] as String? : null;
         return _fadeSlideRoute(
-          ChatScreen(journalMode: chatJournalMode),
+          ChatScreen(
+            journalMode: chatJournalMode,
+            conversationId: chatConversationId,
+          ),
         );
 
       case voiceChat:

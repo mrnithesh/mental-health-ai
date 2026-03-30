@@ -478,7 +478,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Write down your thoughts and feelings.\nNILAA can reflect on them with you.',
+              'Write down your thoughts and feelings.\nAmigo can reflect on them with you.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -771,7 +771,7 @@ class _NewEntrySheet extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
-                        'Guided by NILAA',
+                        'Guided by Amigo',
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textTertiary,
@@ -823,7 +823,7 @@ class _NewEntrySheet extends StatelessWidget {
                 icon: Icons.chat_bubble_outline_rounded,
                 iconColor: AppColors.primary,
                 title: 'Chat & Journal',
-                subtitle: 'Text with NILAA, then save it as a journal',
+                subtitle: 'Text with Amigo, then save it as a journal',
                 onTap: onChatJournal,
               ),
               const SizedBox(height: 8),
@@ -831,7 +831,7 @@ class _NewEntrySheet extends StatelessWidget {
                 icon: Icons.mic_rounded,
                 iconColor: AppColors.secondary,
                 title: 'Voice & Journal',
-                subtitle: 'Talk to NILAA by voice, then save it',
+                subtitle: 'Talk to Amigo by voice, then save it',
                 onTap: onVoiceJournal,
               ),
             ],

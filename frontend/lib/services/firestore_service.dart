@@ -16,6 +16,39 @@ class FirestoreService {
     return _firestore.collection('users').doc(_uid);
   }
 
+  // ============ User Preferences ============
+
+  Future<Map<String, dynamic>> getUserPreferences() async {
+    final doc = await _userDoc.get();
+    if (!doc.exists) return {};
+    final data = doc.data() as Map<String, dynamic>? ?? {};
+    return data['preferences'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> updateUserPreference(String key, dynamic value) async {
+    await _userDoc.set({
+      'preferences': {key: value},
+    }, SetOptions(merge: true));
+  }
+
+  Future<String> getPreferredVoice() async {
+    final prefs = await getUserPreferences();
+    return prefs['voiceId'] as String? ?? 'leda';
+  }
+
+  Future<void> setPreferredVoice(String voiceId) async {
+    await updateUserPreference('voiceId', voiceId);
+  }
+
+  Future<String> getNickname() async {
+    final prefs = await getUserPreferences();
+    return prefs['nickname'] as String? ?? '';
+  }
+
+  Future<void> setNickname(String nickname) async {
+    await updateUserPreference('nickname', nickname);
+  }
+
   // ============ Conversations ============
 
   CollectionReference get _conversationsCollection =>
@@ -59,6 +92,15 @@ class FirestoreService {
   Future<void> updateConversationTitle(String id, String title) async {
     await _conversationsCollection.doc(id).update({
       'title': title,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Update conversation context summary
+  Future<void> updateConversationContextSummary(
+      String id, String summary) async {
+    await _conversationsCollection.doc(id).update({
+      'contextSummary': summary,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -117,6 +159,22 @@ class FirestoreService {
     });
     
     return message;
+  }
+
+  /// Delete specific messages from a conversation
+  Future<void> deleteMessages({
+    required String conversationId,
+    required List<String> messageIds,
+  }) async {
+    final batch = _firestore.batch();
+    for (final id in messageIds) {
+      batch.delete(_messagesCollection(conversationId).doc(id));
+    }
+    batch.update(_conversationsCollection.doc(conversationId), {
+      'messageCount': FieldValue.increment(-messageIds.length),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
   }
 
   // ============ Journals ============

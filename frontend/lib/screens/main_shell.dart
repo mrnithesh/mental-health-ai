@@ -5,24 +5,33 @@ import 'home/home_screen.dart';
 import 'chat/chat_screen.dart';
 import 'voice/voice_chat_screen.dart';
 import 'journal/journal_list_screen.dart';
-import 'mood/mood_tracker_screen.dart';
+import 'settings/settings_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  MainShellState createState() => MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+
+  static MainShellState? of(BuildContext context) =>
+      context.findAncestorStateOfType<MainShellState>();
+
+  void switchTab(int index) {
+    if (index >= 0 && index < _screens.length) {
+      setState(() => _currentIndex = index);
+    }
+  }
 
   final List<Widget> _screens = const [
     HomeScreen(),
     ChatScreen(),
     VoiceChatScreen(),
     JournalListScreen(),
-    MoodTrackerScreen(),
+    SettingsScreen(),
   ];
 
   @override
@@ -79,9 +88,9 @@ class _MainShellState extends State<MainShell> {
                 onTap: () => setState(() => _currentIndex = 3),
               ),
               _NavItem(
-                icon: Icons.mood_outlined,
-                activeIcon: Icons.mood_rounded,
-                label: 'Mood',
+                icon: Icons.settings_outlined,
+                activeIcon: Icons.settings_rounded,
+                label: 'Settings',
                 isSelected: _currentIndex == 4,
                 onTap: () => setState(() => _currentIndex = 4),
               ),

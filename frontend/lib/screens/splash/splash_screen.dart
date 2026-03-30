@@ -134,7 +134,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                       const SizedBox(height: 28),
                       const Text(
-                        'NILAA',
+                        'Amigo',
                         style: TextStyle(
                           fontSize: 34,
                           fontWeight: FontWeight.bold,
@@ -144,7 +144,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Your AI Mental Health Companion',
+                        'Your AI Companion',
                         style: TextStyle(
                           fontSize: 15,
                           color: Colors.white.withValues(alpha: 0.85),

@@ -327,7 +327,7 @@ class JournalEditorNotifier extends StateNotifier<JournalEditorState> {
   Future<void> generateInsight() async {
     if (state.content.trim().isEmpty) {
       state = state.copyWith(
-          error: 'Write something first so NILAA can reflect on it');
+          error: 'Write something first so Amigo can reflect on it');
       return;
     }
 

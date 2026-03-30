@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 class AppConstants {
   // Pagination
   static const int defaultPageSize = 20;
@@ -94,6 +96,76 @@ class JournalTemplate {
       return null;
     }
   }
+}
+
+class AmigoVoice {
+  final String id;
+  final String name;
+  final String voiceCode;
+  final String description;
+  final String personality;
+  final IconData icon;
+  final bool isAvailable;
+
+  const AmigoVoice({
+    required this.id,
+    required this.name,
+    required this.voiceCode,
+    required this.description,
+    required this.personality,
+    required this.icon,
+    this.isAvailable = false,
+  });
+
+  static const String defaultVoiceId = 'leda';
+
+  static const List<AmigoVoice> all = [
+    AmigoVoice(
+      id: 'leda',
+      name: 'Nila',
+      voiceCode: 'Leda',
+      description: 'Warm & gentle (Female)',
+      personality: 'You are Nila — a warm, empathetic female companion. You speak softly and gently, like a caring older sister. You are nurturing, patient, and always make the user feel safe and heard.',
+      icon: IconData(0xe491, fontFamily: 'MaterialIcons'),
+      isAvailable: true,
+    ),
+    AmigoVoice(
+      id: 'fenrir',
+      name: 'Amigo',
+      voiceCode: 'Fenrir',
+      description: 'Calm & steady (Male)',
+      personality: 'You are Amigo — a calm, grounded male companion. You have a steady, reassuring presence like a trusted best friend. You are laid-back, supportive, and encourage the user with quiet confidence.',
+      icon: IconData(0xe491, fontFamily: 'MaterialIcons'),
+      isAvailable: true,
+    ),
+    AmigoVoice(
+      id: 'nova',
+      name: 'Nova',
+      voiceCode: '',
+      description: 'Cheerful & bright',
+      personality: '',
+      icon: IconData(0xe491, fontFamily: 'MaterialIcons'),
+    ),
+    AmigoVoice(
+      id: 'sage',
+      name: 'Sage',
+      voiceCode: '',
+      description: 'Thoughtful & calm',
+      personality: '',
+      icon: IconData(0xe491, fontFamily: 'MaterialIcons'),
+    ),
+  ];
+
+  static AmigoVoice? byId(String id) {
+    try {
+      return all.firstWhere((v) => v.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static AmigoVoice get defaultVoice =>
+      byId(defaultVoiceId) ?? all.first;
 }
 
 class MoodEmojis {

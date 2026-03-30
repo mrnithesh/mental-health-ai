@@ -320,7 +320,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'NILAA is reading your mood...',
+                    'Amigo is reading your mood...',
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textTertiary,
@@ -439,7 +439,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
           ),
           const SizedBox(height: 24),
 
-          // NILAA prompt bubble
+          // Amigo prompt bubble
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -619,7 +619,7 @@ class _MoodSuggestion extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'NILAA thinks you\'re feeling $emoji $label',
+              'Amigo thinks you\'re feeling $emoji $label',
               style: TextStyle(
                 fontSize: 13,
                 color: AppColors.textPrimary,
@@ -864,7 +864,7 @@ class _InsightCard extends StatelessWidget {
                       size: 16, color: AppColors.secondary),
                   const SizedBox(width: 8),
                   Text(
-                    'NILAA\'s Reflection',
+                    'Amigo\'s Reflection',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -1075,7 +1075,7 @@ class _TemplateToolbar extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Ask NILAA button
+// Ask Amigo button
 // ---------------------------------------------------------------------------
 
 class _AskNilaaButton extends StatelessWidget {
@@ -1126,7 +1126,7 @@ class _AskNilaaButton extends StatelessWidget {
               ),
             const SizedBox(width: 6),
             Text(
-              isGenerating ? 'Reflecting...' : 'Ask NILAA',
+              isGenerating ? 'Reflecting...' : 'Ask Amigo',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

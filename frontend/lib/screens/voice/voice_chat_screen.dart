@@ -10,6 +10,7 @@ import 'package:record/record.dart';
 import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/voice_provider.dart';
 import '../../utils/audio_output.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 
@@ -310,7 +311,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   String _gatherTranscriptAsText() {
     final buffer = StringBuffer();
     for (final msg in _transcript) {
-      final label = msg.isUser ? 'User' : 'NILAA';
+      final label = msg.isUser ? 'User' : ref.read(activeVoiceProvider).name;
       buffer.writeln('$label: ${msg.text}');
     }
     return buffer.toString();
@@ -343,7 +344,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                 const CircularProgressIndicator(color: AppColors.primary),
                 const SizedBox(height: 16),
                 Text(
-                  'NILAA is writing it up...',
+                  '${ref.read(activeVoiceProvider).name} is writing it up...',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -768,7 +769,10 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                     itemBuilder: (context, index) {
                       final message =
                           _transcript[_transcript.length - 1 - index];
-                      return _TranscriptBubble(message: message);
+                      return _TranscriptBubble(
+                        message: message,
+                        voiceName: ref.read(activeVoiceProvider).name,
+                      );
                     },
                   ),
           ),
@@ -786,7 +790,8 @@ class _TranscriptMessage {
 
 class _TranscriptBubble extends StatelessWidget {
   final _TranscriptMessage message;
-  const _TranscriptBubble({required this.message});
+  final String voiceName;
+  const _TranscriptBubble({required this.message, required this.voiceName});
 
   @override
   Widget build(BuildContext context) {
@@ -816,7 +821,7 @@ class _TranscriptBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  message.isUser ? 'You' : 'NILAA',
+                  message.isUser ? 'You' : voiceName,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,

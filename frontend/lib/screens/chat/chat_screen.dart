@@ -6,13 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/routes.dart';
 import '../../config/theme.dart';
+import '../../providers/chat_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/voice_provider.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 
 class ChatScreen extends ConsumerStatefulWidget {
   final bool journalMode;
+  final String? conversationId;
 
-  const ChatScreen({super.key, this.journalMode = false});
+  const ChatScreen({super.key, this.journalMode = false, this.conversationId});
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -27,12 +30,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _isInputFocused = false;
   bool _savedAsJournal = false;
   bool _isSummarizing = false;
+  bool _isLoadingHistory = false;
   ChatSession? _chatSession;
+  bool _conversationCreated = false;
+  int _userMessageCount = 0;
+
+  bool _isSelectionMode = false;
+  final Set<int> _selectedIndices = {};
 
   late AnimationController _typingController;
   late VoidCallback _messageInputListener;
 
   bool get _canSend => _messageController.text.trim().isNotEmpty;
+  bool get _isPrivate => ref.read(chatSessionProvider).isPrivate;
 
   @override
   void initState() {
@@ -48,16 +58,145 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _messageController.addListener(_messageInputListener);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.conversationId != null) {
+        _resumeConversation(widget.conversationId!);
+      } else if (!widget.journalMode) {
+        _loadOrStartConversation();
+      } else {
+        _startFreshChat();
+      }
+    });
+  }
+
+  Future<void> _resumeConversation(String conversationId) async {
+    setState(() => _isLoadingHistory = true);
+    try {
+      final chatNotifier = ref.read(chatSessionProvider.notifier);
+      chatNotifier.resumeConversation(conversationId);
+
+      final firestoreService = ref.read(firestoreServiceProvider);
+
+      final conversation = await firestoreService.getConversation(conversationId);
+      final contextSummary = conversation?.contextSummary;
+
+      final messagesStream = firestoreService.getMessages(conversationId);
+      final messagesList = await messagesStream.first;
+
+      final history = <Content>[];
+
+      if (contextSummary != null && contextSummary.isNotEmpty) {
+        history.add(Content('user', [TextPart('Previous context: $contextSummary')]));
+        history.add(Content('model', [TextPart('I remember our previous conversation. How can I help you today?')]));
+      }
+
+      for (final msg in messagesList) {
+        _messages.add(_ChatMessage(
+          firestoreId: msg.id,
+          text: msg.content,
+          isUser: msg.isUser,
+          timestamp: msg.createdAt,
+        ));
+        history.add(msg.isUser
+            ? Content('user', [TextPart(msg.content)])
+            : Content('model', [TextPart(msg.content)]));
+        if (msg.isUser) _userMessageCount++;
+      }
+
+      final geminiService = ref.read(geminiServiceProvider);
+      _chatSession = geminiService.startChat(history: history);
+      _conversationCreated = true;
+    } catch (e) {
+      debugPrint('Failed to resume conversation: $e');
       final geminiService = ref.read(geminiServiceProvider);
       _chatSession = geminiService.startChat();
-    });
+    }
+    if (mounted) setState(() => _isLoadingHistory = false);
+  }
 
+  Future<void> _loadOrStartConversation() async {
+    if (_isPrivate) {
+      _startFreshChat();
+      return;
+    }
+
+    setState(() => _isLoadingHistory = true);
+    try {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final conversationsStream = firestoreService.getConversations();
+      final conversations = await conversationsStream.first;
+
+      if (conversations.isNotEmpty) {
+        final latest = conversations.first;
+        final age = DateTime.now().difference(latest.updatedAt);
+        // Resume if the conversation is less than 24 hours old
+        if (age.inHours < 24) {
+          if (mounted) setState(() => _isLoadingHistory = false);
+          await _resumeConversation(latest.id);
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load recent conversation: $e');
+    }
+
+    if (mounted) setState(() => _isLoadingHistory = false);
+    _startFreshChat();
+  }
+
+  void _startFreshChat() {
+    final geminiService = ref.read(geminiServiceProvider);
+    _chatSession = geminiService.startChat();
+    final voiceName = ref.read(activeVoiceProvider).name;
     _messages.add(_ChatMessage(
       text:
-          "Hey! I'm NILAA, your virtual friend. You can talk to me about anything—casual stuff, feelings, or whatever is on your mind. How are you doing today?",
+          "Hey! I'm $voiceName, your virtual friend. You can talk to me about anything—casual stuff, feelings, or whatever is on your mind. How are you doing today?",
       isUser: false,
       timestamp: DateTime.now(),
     ));
+    if (mounted) setState(() {});
+  }
+
+  void _toggleSelection(int index) {
+    setState(() {
+      if (_selectedIndices.contains(index)) {
+        _selectedIndices.remove(index);
+        if (_selectedIndices.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedIndices.add(index);
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIndices.clear();
+    });
+  }
+
+  Future<void> _deleteSelectedMessages() async {
+    final indices = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
+    final firestoreIds = <String>[];
+
+    for (final i in indices) {
+      if (i < _messages.length) {
+        final msg = _messages[i];
+        if (msg.firestoreId != null) firestoreIds.add(msg.firestoreId!);
+      }
+    }
+
+    if (firestoreIds.isNotEmpty && !_isPrivate) {
+      final chatNotifier = ref.read(chatSessionProvider.notifier);
+      await chatNotifier.deleteMessages(firestoreIds);
+    }
+
+    setState(() {
+      for (final i in indices) {
+        if (i < _messages.length) _messages.removeAt(i);
+      }
+      _isSelectionMode = false;
+      _selectedIndices.clear();
+    });
   }
 
   @override
@@ -92,6 +231,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     }
 
+    _userMessageCount++;
     setState(() {
       _messages.add(_ChatMessage(
         text: text,
@@ -104,6 +244,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     _scrollToBottom();
 
+    final chatNotifier = ref.read(chatSessionProvider.notifier);
+    if (!_isPrivate && !_conversationCreated && !widget.journalMode) {
+      await chatNotifier.createConversation(
+        title: text.length > 40 ? '${text.substring(0, 40)}...' : text,
+      );
+      _conversationCreated = true;
+      // Persist the initial greeting so it appears when resuming
+      if (_messages.isNotEmpty && !_messages.first.isUser) {
+        chatNotifier.persistMessage(
+          role: 'assistant',
+          content: _messages.first.text,
+        );
+      }
+    }
+
+    if (!_isPrivate) {
+      chatNotifier.persistMessage(role: 'user', content: text);
+    }
+
     try {
       int? aiMessageIndex;
       final aiMessageTime = DateTime.now();
@@ -111,9 +270,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         Content.text(text),
       );
 
+      final responseBuffer = StringBuffer();
+
       await for (final chunk in responseStream) {
         final chunkText = chunk.text;
         if (chunkText != null && chunkText.isNotEmpty) {
+          responseBuffer.write(chunkText);
           setState(() {
             _isTyping = false;
             aiMessageIndex ??= _messages.length;
@@ -133,6 +295,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           });
           _scrollToBottom();
         }
+      }
+
+      if (responseBuffer.isNotEmpty && !_isPrivate) {
+        chatNotifier.persistMessage(
+          role: 'assistant',
+          content: responseBuffer.toString(),
+        );
+      }
+
+      // Context memory: summarize older messages when threshold is exceeded
+      // TODO: Move threshold to config; consider token counting instead of message counting
+      const contextWindowSize = 20;
+      final totalMessages =
+          _messages.where((m) => !m.isError).length;
+      if (!_isPrivate &&
+          totalMessages > contextWindowSize &&
+          totalMessages % 10 == 0) {
+        _summarizeContextInBackground();
       }
 
       if (mounted) {
@@ -180,21 +360,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  bool get _canSaveAsJournal {
-    final userMsgCount =
-        _messages.where((m) => m.isUser && !m.isError).length;
-    return userMsgCount >= 2;
+  Future<void> _summarizeContextInBackground() async {
+    try {
+      final olderMessages = _messages
+          .where((m) => !m.isError)
+          .skip(1)
+          .take((_messages.length - 10).clamp(0, _messages.length))
+          .map((m) => '${m.isUser ? "User" : ref.read(activeVoiceProvider).name}: ${m.text}')
+          .join('\n');
+
+      if (olderMessages.isEmpty) return;
+
+      final geminiService = ref.read(geminiServiceProvider);
+      final summary = await geminiService.summarizeForContext(olderMessages);
+
+      if (summary.isNotEmpty) {
+        final chatNotifier = ref.read(chatSessionProvider.notifier);
+        await chatNotifier.saveContextSummary(summary);
+        debugPrint('Context summary saved (${summary.length} chars)');
+      }
+    } catch (e) {
+      debugPrint('Context summarization failed: $e');
+    }
   }
+
+  bool get _canSaveAsJournal => _userMessageCount >= 2;
 
   String _gatherMessagesAsText() {
     final msgs = _messages
         .where((m) => !m.isError)
-        .skip(1) // skip initial NILAA greeting
+        .skip(1) // skip initial Amigo greeting
         .toList();
     final limit = msgs.length > 30 ? msgs.length - 30 : 0;
     final buffer = StringBuffer();
     for (int i = limit; i < msgs.length; i++) {
-      final label = msgs[i].isUser ? 'User' : 'NILAA';
+      final label = msgs[i].isUser ? 'User' : ref.read(activeVoiceProvider).name;
       buffer.writeln('$label: ${msgs[i].text}');
     }
     return buffer.toString();
@@ -230,7 +430,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 const CircularProgressIndicator(color: AppColors.primary),
                 const SizedBox(height: 16),
                 Text(
-                  'NILAA is writing up your conversation...',
+                  '${ref.read(activeVoiceProvider).name} is writing up your conversation...',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -252,7 +452,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '$userMsgCount messages with NILAA',
+                  '$userMsgCount messages with ${ref.read(activeVoiceProvider).name}',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textTertiary,
@@ -350,13 +550,92 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ),
           child: Column(
             children: [
-              _buildAppBar(isDark),
+              if (_isSelectionMode)
+                _buildSelectionBar()
+              else
+                _buildAppBar(isDark),
               Expanded(child: _buildMessagesList(isDark)),
               if (_isTyping) _buildTypingIndicator(isDark),
-              _buildInputArea(isDark),
+              if (!_isSelectionMode) _buildInputArea(isDark),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: const Color(0xFFE0DCD6), width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: _exitSelectionMode,
+            color: AppColors.textPrimary,
+            iconSize: 22,
+          ),
+          Text(
+            '${_selectedIndices.length} selected',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _selectedIndices.isEmpty
+                ? null
+                : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete Messages'),
+                        content: Text(
+                          'Delete ${_selectedIndices.length} message${_selectedIndices.length == 1 ? '' : 's'}? This cannot be undone.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.error,
+                            ),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) await _deleteSelectedMessages();
+                  },
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+              color: _selectedIndices.isEmpty
+                  ? AppColors.textTertiary
+                  : AppColors.error,
+            ),
+            label: Text(
+              'Delete',
+              style: TextStyle(
+                color: _selectedIndices.isEmpty
+                    ? AppColors.textTertiary
+                    : AppColors.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -402,7 +681,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'NILAA',
+                  ref.watch(activeVoiceProvider).name,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: _ChatPalette.textPrimary(isDark),
@@ -456,20 +735,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ),
             )
           else ...[
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _ChatPalette.statusPillBackground(isDark),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: _ChatPalette.border(isDark)),
-              ),
-              child: Text(
-                'Private chat',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: _ChatPalette.textSecondary(isDark),
-                      fontWeight: FontWeight.w600,
+            GestureDetector(
+              onTap: () {
+                final notifier = ref.read(chatSessionProvider.notifier);
+                notifier.togglePrivate();
+                setState(() {});
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _isPrivate
+                      ? AppColors.accent.withValues(alpha: 0.12)
+                      : _ChatPalette.statusPillBackground(isDark),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: _isPrivate
+                        ? AppColors.accent.withValues(alpha: 0.4)
+                        : _ChatPalette.border(isDark),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _isPrivate
+                          ? Icons.lock_rounded
+                          : Icons.lock_open_rounded,
+                      size: 13,
+                      color: _isPrivate
+                          ? AppColors.accent
+                          : _ChatPalette.textSecondary(isDark),
                     ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _isPrivate ? 'Private' : 'Saved',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: _isPrivate
+                                ? AppColors.accent
+                                : _ChatPalette.textSecondary(isDark),
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -496,6 +806,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _buildMessagesList(bool isDark) {
+    if (_isLoadingHistory) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppColors.primary),
+            SizedBox(height: 12),
+            Text(
+              'Loading conversation...',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -504,14 +829,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         final message = _messages[index];
         final showAvatar =
             index == 0 || _messages[index - 1].isUser != message.isUser;
+        final isSelected = _selectedIndices.contains(index);
 
-        return _AnimatedMessageEntry(
-          key: ValueKey('${message.timestamp.microsecondsSinceEpoch}-${message.isUser}'),
-          isUser: message.isUser,
-          child: _MessageBubble(
-            message: message,
-            showAvatar: showAvatar,
-            isDark: isDark,
+        return GestureDetector(
+          onLongPress: () {
+            if (!_isSelectionMode) {
+              setState(() => _isSelectionMode = true);
+            }
+            _toggleSelection(index);
+          },
+          onTap: _isSelectionMode ? () => _toggleSelection(index) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.08)
+                : Colors.transparent,
+            child: Row(
+              children: [
+                if (_isSelectionMode)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Icon(
+                      isSelected
+                          ? Icons.check_circle_rounded
+                          : Icons.circle_outlined,
+                      size: 20,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                Expanded(
+                  child: _AnimatedMessageEntry(
+                    key: ValueKey('${message.timestamp.microsecondsSinceEpoch}-${message.isUser}'),
+                    isUser: message.isUser,
+                    child: _MessageBubble(
+                      message: message,
+                      showAvatar: showAvatar,
+                      isDark: isDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -593,8 +953,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   color: _isInputFocused
                       ? _ChatPalette.accent
                       : _ChatPalette.border(isDark),
-                  width: _isInputFocused ? 1.3 : 1,
+                  width: _isInputFocused ? 1.5 : 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: TextField(
                 controller: _messageController,
@@ -674,7 +1041,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   padding: const EdgeInsets.all(12),
                   child: Icon(
                     _canSend ? Icons.send_rounded : Icons.mic_rounded,
-                    color: _canSend ? Colors.white : _ChatPalette.textHint(isDark),
+                    color: _canSend ? Colors.white : _ChatPalette.textSecondary(isDark),
                     size: 20,
                   ),
                 ),
@@ -688,12 +1055,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 }
 
 class _ChatMessage {
+  final String? firestoreId;
   final String text;
   final bool isUser;
   final DateTime timestamp;
   final bool isError;
 
   _ChatMessage({
+    this.firestoreId,
     required this.text,
     required this.isUser,
     required this.timestamp,
@@ -905,7 +1274,7 @@ class _ChatPalette {
   static Color composerSurface(bool isDark) =>
       isDark ? AppColors.darkSurface : AppColors.surface;
   static Color inputBackground(bool isDark) =>
-      isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
+      isDark ? AppColors.darkSurfaceVariant : Colors.white;
   static Color assistantBubbleBackground(bool isDark) =>
       isDark ? AppColors.darkSurfaceVariant : AppColors.surface;
   static Color errorBubbleBackground(bool isDark) =>
@@ -915,7 +1284,7 @@ class _ChatPalette {
   static Color statusPillBackground(bool isDark) =>
       isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
   static Color border(bool isDark) =>
-      isDark ? const Color(0xFF4A4540) : AppColors.surfaceVariant;
+      isDark ? const Color(0xFF4A4540) : const Color(0xFFE0DCD6);
   static Color sendDisabled(bool isDark) =>
       isDark ? const Color(0xFF4A4540) : AppColors.surfaceVariant;
   static Color textPrimary(bool isDark) =>
@@ -923,5 +1292,5 @@ class _ChatPalette {
   static Color textSecondary(bool isDark) =>
       isDark ? AppColors.textTertiary : AppColors.textSecondary;
   static Color textHint(bool isDark) =>
-      isDark ? AppColors.textTertiary : AppColors.textTertiary;
+      isDark ? AppColors.textTertiary : AppColors.textSecondary;
 }

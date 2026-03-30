@@ -6,8 +6,10 @@ class GeminiService {
   static const _textModel = 'gemini-2.5-flash';
   static const _liveModel = 'gemini-2.5-flash-native-audio-preview-12-2025';
 
-  static const _textSystemInstruction = '''
-You are NILAA, a supportive virtual friend users can talk to for both casual and emotional situations.
+  static String _buildTextInstruction(String personality, String userName) => '''
+$personality
+
+The user's name is $userName. You may use their name occasionally to feel personal, but don't overdo it.
 
 Tone and language:
 - Talk like a close, caring friend: warm, casual, and genuine. Avoid stiff, clinical, or lecture-like wording.
@@ -25,8 +27,10 @@ Guidelines:
 - If someone mentions self-harm or suicide, respond with care and gently encourage contacting a crisis helpline or mental health professional immediately.
 ''';
 
-  static const _voiceSystemInstruction = '''
-You are NILAA, a supportive virtual friend users can talk to for both casual and emotional situations.
+  static String _buildVoiceInstruction(String personality, String userName) => '''
+$personality
+
+The user's name is $userName. You may use their name occasionally to feel personal.
 
 Voice language behavior:
 - Default to Tamil (தமிழ்) and speak in clear, everyday spoken Tamil with familiar terms.
@@ -46,8 +50,17 @@ Guidelines:
 - If someone mentions self-harm or suicide, respond with care and gently encourage contacting a crisis helpline or mental health professional immediately.
 ''';
 
-  late final GenerativeModel _chatModel;
-  late final LiveGenerativeModel _voiceModel;
+  static const _defaultPersonality =
+      'You are Nila — a warm, empathetic female companion who speaks gently like a caring older sister.';
+
+  late GenerativeModel _chatModel;
+  late LiveGenerativeModel _voiceModel;
+  String _currentVoiceCode = 'Leda';
+  String _currentPersonality = _defaultPersonality;
+  String _currentUserName = 'Friend';
+  String _currentVoiceName = 'Nila';
+
+  String get activeVoiceName => _currentVoiceName;
 
   GeminiService() {
     debugPrint('GeminiService: initializing with models $_textModel / $_liveModel');
@@ -55,23 +68,65 @@ Guidelines:
 
     _chatModel = ai.generativeModel(
       model: _textModel,
-      systemInstruction: Content.system(_textSystemInstruction),
+      systemInstruction: Content.system(
+        _buildTextInstruction(_defaultPersonality, _currentUserName),
+      ),
     );
 
-    _voiceModel = ai.liveGenerativeModel(
+    _voiceModel = _buildVoiceModel(ai, 'Leda');
+    debugPrint('GeminiService: initialized successfully');
+  }
+
+  LiveGenerativeModel _buildVoiceModel(FirebaseAI ai, String voiceName) {
+    return ai.liveGenerativeModel(
       model: _liveModel,
-      systemInstruction: Content.system(_voiceSystemInstruction),
+      systemInstruction: Content.system(
+        _buildVoiceInstruction(_currentPersonality, _currentUserName),
+      ),
       liveGenerationConfig: LiveGenerationConfig(
-        speechConfig: SpeechConfig(voiceName: 'Leda'),
+        speechConfig: SpeechConfig(voiceName: voiceName),
         responseModalities: [ResponseModalities.audio],
         inputAudioTranscription: AudioTranscriptionConfig(),
         outputAudioTranscription: AudioTranscriptionConfig(),
       ),
     );
-    debugPrint('GeminiService: initialized successfully');
   }
 
-  ChatSession startChat() => _chatModel.startChat();
+  void setVoice(String voiceCode, {String? personality, String? voiceName}) {
+    final personalityChanged = personality != null && personality != _currentPersonality;
+    final voiceChanged = voiceCode != _currentVoiceCode && voiceCode.isNotEmpty;
+
+    if (personality != null) _currentPersonality = personality;
+    if (voiceName != null) _currentVoiceName = voiceName;
+
+    if (voiceChanged || personalityChanged) {
+      if (voiceCode.isNotEmpty) _currentVoiceCode = voiceCode;
+      final ai = FirebaseAI.googleAI(auth: FirebaseAuth.instance);
+      _voiceModel = _buildVoiceModel(ai, _currentVoiceCode);
+      debugPrint('GeminiService: voice=$_currentVoiceCode personality=$_currentVoiceName');
+    }
+
+    _rebuildChatModel();
+  }
+
+  void setUserName(String name) {
+    if (name == _currentUserName || name.isEmpty) return;
+    _currentUserName = name;
+    _rebuildChatModel();
+  }
+
+  void _rebuildChatModel() {
+    final ai = FirebaseAI.googleAI(auth: FirebaseAuth.instance);
+    _chatModel = ai.generativeModel(
+      model: _textModel,
+      systemInstruction: Content.system(
+        _buildTextInstruction(_currentPersonality, _currentUserName),
+      ),
+    );
+  }
+
+  ChatSession startChat({List<Content>? history}) =>
+      _chatModel.startChat(history: history);
 
   Future<LiveSession> connectLive() => _voiceModel.connect();
 
@@ -116,8 +171,8 @@ Guidelines:
 
   /// Generate a warm, supportive reflection on a journal entry.
   Future<String> generateJournalInsight(String content) async {
-    const prompt = '''
-Read the following journal entry and provide a brief, warm, supportive reflection as NILAA (a caring friend). 
+    final prompt = '''
+Read the following journal entry and provide a brief, warm, supportive reflection as $_currentVoiceName (a caring friend). 
 Keep it to 2-3 sentences. Be empathetic, validate their feelings, and if appropriate offer a gentle positive reframe or encouragement. 
 Do not repeat what they wrote. Do not diagnose or prescribe. Match the language of the journal entry.
 
@@ -139,13 +194,13 @@ Journal entry:
   /// Returns a record with title and body. Falls back to raw transcript on error.
   Future<({String title, String body})> summarizeConversation(
       String formattedTranscript) async {
-    const prompt = '''
+    final prompt = '''
 Transform this conversation into a first-person journal entry.
 Rules:
 - Write as if the user is journaling about what they discussed
 - Keep their voice, language, and tone (Tamil/English/Tanglish as used)
 - Focus on feelings, realizations, and takeaways
-- Do NOT quote NILAA directly -- weave insights naturally
+- Do NOT quote $_currentVoiceName directly -- weave insights naturally
 - Clean up any transcript fragments or errors
 - Aim for 150-300 words
 - Return in this exact format:
@@ -202,7 +257,47 @@ Conversation:
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    return 'Chat with NILAA -- ${months[now.month - 1]} ${now.day}';
+    return 'Chat with $_currentVoiceName -- ${months[now.month - 1]} ${now.day}';
+  }
+
+  /// Summarize older messages to create a compact context for continuing a conversation.
+  Future<String> summarizeForContext(String messageHistory) async {
+    const prompt = '''
+Summarize the key topics, emotions, and decisions from this conversation in 2-3 sentences. 
+This summary will be used as context for continuing the conversation. Be concise and factual.
+Focus on what the user shared, how they felt, and any conclusions reached.
+
+Conversation:
+''';
+
+    try {
+      final response = await _chatModel.generateContent([
+        Content.text('$prompt$messageHistory'),
+      ]);
+      return response.text?.trim() ?? '';
+    } catch (e) {
+      debugPrint('GeminiService summarizeForContext failed: $e');
+      return '';
+    }
+  }
+
+  /// Generate a daily reflection/journaling prompt.
+  Future<String> generateDailyPrompt() async {
+    const prompt = '''
+Generate a single, warm, thoughtful journaling prompt for today. 
+It should be a reflective question that encourages self-awareness and is suitable for any mood.
+Keep it under 15 words. Do not add quotes or prefixes. Just the question.
+''';
+
+    try {
+      final response = await _chatModel.generateContent([
+        Content.text(prompt),
+      ]);
+      return response.text?.trim() ?? 'What moment today are you most grateful for?';
+    } catch (e) {
+      debugPrint('GeminiService generateDailyPrompt failed: $e');
+      return 'What moment today are you most grateful for?';
+    }
   }
 
   /// Quick health check: sends a trivial prompt to verify the API is reachable.

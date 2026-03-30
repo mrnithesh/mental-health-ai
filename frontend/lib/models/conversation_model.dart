@@ -4,6 +4,7 @@ class ConversationModel {
   final String id;
   final String title;
   final int messageCount;
+  final String? contextSummary;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -11,6 +12,7 @@ class ConversationModel {
     required this.id,
     required this.title,
     required this.messageCount,
+    this.contextSummary,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -21,6 +23,7 @@ class ConversationModel {
       id: doc.id,
       title: data['title'] ?? 'New Conversation',
       messageCount: data['messageCount'] ?? 0,
+      contextSummary: data['contextSummary'] as String?,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
     );
@@ -30,6 +33,7 @@ class ConversationModel {
     return {
       'title': title,
       'messageCount': messageCount,
+      if (contextSummary != null) 'contextSummary': contextSummary,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -39,6 +43,7 @@ class ConversationModel {
     String? id,
     String? title,
     int? messageCount,
+    String? contextSummary,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -46,6 +51,7 @@ class ConversationModel {
       id: id ?? this.id,
       title: title ?? this.title,
       messageCount: messageCount ?? this.messageCount,
+      contextSummary: contextSummary ?? this.contextSummary,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

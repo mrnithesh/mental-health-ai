@@ -50,7 +50,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
       },
       data: (_) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.main);
+        Navigator.of(context).pushReplacementNamed(AppRoutes.voiceSetup);
       },
     );
   }
@@ -99,7 +99,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       children: [
                         const SizedBox(height: 12),
                         const Text(
-                          'Join NILAA',
+                          'Join Amigo',
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
