@@ -7,6 +7,7 @@ class JournalModel {
   final String? moodId;
   final String? aiInsight;
   final String? summary;
+  final bool isHighlight;
   final List<String> tags;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -18,6 +19,7 @@ class JournalModel {
     this.moodId,
     this.aiInsight,
     this.summary,
+    this.isHighlight = false,
     this.tags = const [],
     required this.createdAt,
     required this.updatedAt,
@@ -32,6 +34,7 @@ class JournalModel {
       moodId: data['moodId'],
       aiInsight: data['aiInsight'],
       summary: data['summary'],
+      isHighlight: data['isHighlight'] ?? false,
       tags: List<String>.from(data['tags'] ?? []),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
@@ -45,6 +48,7 @@ class JournalModel {
       'moodId': moodId,
       'aiInsight': aiInsight,
       'summary': summary,
+      'isHighlight': isHighlight,
       'tags': tags,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
@@ -58,6 +62,7 @@ class JournalModel {
     String? moodId,
     String? aiInsight,
     String? summary,
+    bool? isHighlight,
     List<String>? tags,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -69,6 +74,7 @@ class JournalModel {
       moodId: moodId ?? this.moodId,
       aiInsight: aiInsight ?? this.aiInsight,
       summary: summary ?? this.summary,
+      isHighlight: isHighlight ?? this.isHighlight,
       tags: tags ?? this.tags,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

@@ -48,13 +48,17 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const HomeScreen());
 
       case chat:
-        final conversationId = settings.arguments as String?;
+        final chatArgs = settings.arguments;
+        final chatJournalMode =
+            chatArgs is Map && chatArgs['journalMode'] == true;
         return _fadeSlideRoute(
-          ChatScreen(conversationId: conversationId),
+          ChatScreen(journalMode: chatJournalMode),
         );
 
       case voiceChat:
-        return _fadeSlideRoute(const VoiceChatScreen());
+        final vcArgs = settings.arguments;
+        final vcJournalMode = vcArgs is Map && vcArgs['journalMode'] == true;
+        return _fadeSlideRoute(VoiceChatScreen(journalMode: vcJournalMode));
 
       case journalList:
         return MaterialPageRoute(builder: (_) => const JournalListScreen());

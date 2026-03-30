@@ -145,6 +145,7 @@ class FirestoreService {
     required String content,
     String? moodId,
     String? summary,
+    bool isHighlight = false,
     List<String> tags = const [],
   }) async {
     final now = DateTime.now();
@@ -156,6 +157,7 @@ class FirestoreService {
       content: content,
       moodId: moodId,
       summary: summary,
+      isHighlight: isHighlight,
       tags: tags,
       createdAt: now,
       updatedAt: now,
@@ -173,6 +175,7 @@ class FirestoreService {
     String? moodId,
     String? aiInsight,
     String? summary,
+    bool? isHighlight,
     List<String>? tags,
   }) async {
     final updates = <String, dynamic>{
@@ -184,6 +187,7 @@ class FirestoreService {
     if (moodId != null) updates['moodId'] = moodId;
     if (aiInsight != null) updates['aiInsight'] = aiInsight;
     if (summary != null) updates['summary'] = summary;
+    if (isHighlight != null) updates['isHighlight'] = isHighlight;
     if (tags != null) updates['tags'] = tags;
 
     await _journalsCollection.doc(id).update(updates);

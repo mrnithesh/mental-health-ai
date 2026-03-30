@@ -7,11 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
+import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 
 class ChatScreen extends ConsumerStatefulWidget {
-  final String? conversationId;
+  final bool journalMode;
 
-  const ChatScreen({super.key, this.conversationId});
+  const ChatScreen({super.key, this.journalMode = false});
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -24,6 +25,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
   bool _isInputFocused = false;
+  bool _savedAsJournal = false;
+  bool _isSummarizing = false;
   ChatSession? _chatSession;
 
   late AnimationController _typingController;
@@ -177,6 +180,156 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
+  bool get _canSaveAsJournal {
+    final userMsgCount =
+        _messages.where((m) => m.isUser && !m.isError).length;
+    return userMsgCount >= 2;
+  }
+
+  String _gatherMessagesAsText() {
+    final msgs = _messages
+        .where((m) => !m.isError)
+        .skip(1) // skip initial NILAA greeting
+        .toList();
+    final limit = msgs.length > 30 ? msgs.length - 30 : 0;
+    final buffer = StringBuffer();
+    for (int i = limit; i < msgs.length; i++) {
+      final label = msgs[i].isUser ? 'User' : 'NILAA';
+      buffer.writeln('$label: ${msgs[i].text}');
+    }
+    return buffer.toString();
+  }
+
+  void _showSaveConfirmation() {
+    final userMsgCount =
+        _messages.where((m) => m.isUser && !m.isError).length;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_isSummarizing) ...[
+                const SizedBox(height: 12),
+                const CircularProgressIndicator(color: AppColors.primary),
+                const SizedBox(height: 16),
+                Text(
+                  'NILAA is writing up your conversation...',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                Icon(Icons.note_add_rounded,
+                    size: 32, color: AppColors.primary),
+                const SizedBox(height: 12),
+                Text(
+                  'Save this conversation as a journal entry?',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$userMsgCount messages with NILAA',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      setState(() => _isSummarizing = true);
+                      setSheetState(() {});
+                      await _summarizeAndNavigate();
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Save as Journal',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel',
+                      style: TextStyle(color: AppColors.textSecondary)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _summarizeAndNavigate() async {
+    setState(() => _isSummarizing = true);
+    try {
+      final geminiService = ref.read(geminiServiceProvider);
+      final transcript = _gatherMessagesAsText();
+      final result = await geminiService.summarizeConversation(transcript);
+
+      if (mounted) {
+        setState(() {
+          _isSummarizing = false;
+          _savedAsJournal = true;
+        });
+        Navigator.pushNamed(
+          context,
+          AppRoutes.journalEditor,
+          arguments: JournalEditorArgs(
+            prefillTitle: result.title,
+            prefillContent: result.body,
+            prefillTags: ['chat-journal'],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSummarizing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not summarize conversation'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const isDark = false;
@@ -266,21 +419,66 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: _ChatPalette.statusPillBackground(isDark),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: _ChatPalette.border(isDark)),
+          if (widget.journalMode)
+            TextButton(
+              onPressed:
+                  _canSaveAsJournal && !_savedAsJournal && !_isSummarizing
+                      ? () => _showSaveConfirmation()
+                      : null,
+              style: TextButton.styleFrom(
+                backgroundColor: _canSaveAsJournal && !_savedAsJournal
+                    ? AppColors.primary
+                    : AppColors.surfaceVariant,
+                foregroundColor: _canSaveAsJournal && !_savedAsJournal
+                    ? Colors.white
+                    : _ChatPalette.textSecondary(isDark),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              child: Text(
+                _savedAsJournal ? 'Saved' : 'Done -- Save',
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            )
+          else ...[
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _ChatPalette.statusPillBackground(isDark),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: _ChatPalette.border(isDark)),
+              ),
+              child: Text(
+                'Private chat',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: _ChatPalette.textSecondary(isDark),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
             ),
-            child: Text(
-              'Private chat',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: _ChatPalette.textSecondary(isDark),
-                    fontWeight: FontWeight.w600,
-                  ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _canSaveAsJournal && !_savedAsJournal && !_isSummarizing
+                  ? _showSaveConfirmation
+                  : null,
+              child: Icon(
+                _savedAsJournal
+                    ? Icons.check_circle_rounded
+                    : Icons.note_add_rounded,
+                size: 22,
+                color: _savedAsJournal
+                    ? AppColors.accent
+                    : _canSaveAsJournal
+                        ? _ChatPalette.textPrimary(isDark)
+                        : _ChatPalette.textHint(isDark),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

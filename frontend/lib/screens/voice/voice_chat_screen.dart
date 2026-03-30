@@ -7,14 +7,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
 import '../../utils/audio_output.dart';
+import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 
 enum VoiceState { idle, connecting, listening, speaking, error }
 
 class VoiceChatScreen extends ConsumerStatefulWidget {
-  const VoiceChatScreen({super.key});
+  final bool journalMode;
+
+  const VoiceChatScreen({super.key, this.journalMode = false});
 
   @override
   ConsumerState<VoiceChatScreen> createState() => _VoiceChatScreenState();
@@ -25,11 +29,12 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   VoiceState _state = VoiceState.idle;
   final List<_TranscriptMessage> _transcript = [];
   String? _errorMessage;
+  bool _savedAsJournal = false;
+  bool _isSummarizing = false;
 
   LiveSession? _session;
-  final AudioRecorder _recorder = AudioRecorder();
+  AudioRecorder? _recorder;
   final AudioOutput _audioOutput = AudioOutput();
-  StreamSubscription? _receiveSubscription;
   StreamSubscription? _recordSubscription;
 
   late AnimationController _pulseController;
@@ -75,7 +80,6 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     _waveController.dispose();
     _breatheController.dispose();
     _disconnect();
-    _recorder.dispose();
     _audioOutput.dispose();
     super.dispose();
   }
@@ -124,7 +128,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       _session = await geminiService.connectLive();
       debugPrint('Connected! Starting receive and record...');
 
-      _startReceiving();
+      unawaited(_startReceiving());
       await _startRecording();
 
       setState(() {
@@ -142,23 +146,38 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Future<void> _startRecording() async {
-    final stream = await _recorder.startStream(
+    try {
+      if (_recorder != null) {
+        if (await _recorder!.isRecording()) {
+          await _recorder!.stop();
+        }
+        _recorder!.dispose();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up old recorder: $e');
+    }
+    _recorder = AudioRecorder();
+
+    final stream = await _recorder!.startStream(
       const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
-        sampleRate: 24000,
+        sampleRate: 16000,
         numChannels: 1,
         echoCancel: true,
         noiseSuppress: true,
         androidConfig: AndroidRecordConfig(
           audioSource: AndroidAudioSource.voiceCommunication,
         ),
+        iosConfig: IosRecordConfig(categoryOptions: []),
       ),
     );
 
     _recordSubscription = stream.listen(
       (data) {
-        if (_session != null) {
-          _session!.sendAudioRealtime(InlineDataPart('audio/pcm', data));
+        if (_session != null && _state != VoiceState.speaking) {
+          _session!.sendAudioRealtime(
+            InlineDataPart('audio/pcm;rate=16000', data),
+          );
         }
       },
       onError: (e) {
@@ -167,49 +186,58 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     );
   }
 
-  void _startReceiving() {
+  Future<void> _startReceiving() async {
     if (_session == null) return;
 
-    _receiveSubscription = _session!.receive().listen(
-      (response) {
-        final message = response.message;
+    try {
+      // The SDK's receive() breaks after each turnComplete, so we wrap it
+      // in a while loop to restart listening for the next turn.
+      while (mounted && _session != null) {
+        await for (final response in _session!.receive()) {
+          if (!mounted) break;
 
-        if (message is LiveServerContent) {
-          if (message.modelTurn != null) {
-            for (final part in message.modelTurn!.parts) {
-              if (part is InlineDataPart && part.mimeType.startsWith('audio')) {
-                _audioOutput.addData(part.bytes);
-                if (_state != VoiceState.speaking) {
-                  setState(() => _state = VoiceState.speaking);
+          final message = response.message;
+
+          if (message is LiveServerContent) {
+            if (message.modelTurn != null) {
+              for (final part in message.modelTurn!.parts) {
+                if (part is InlineDataPart &&
+                    part.mimeType.startsWith('audio')) {
+                  _audioOutput.addData(part.bytes);
+                  if (_state != VoiceState.speaking) {
+                    setState(() => _state = VoiceState.speaking);
+                  }
                 }
               }
             }
-          }
 
-          _inputTranscriptionIndex = _handleTranscription(
-            message.inputTranscription, _inputTranscriptionIndex, true);
+            _inputTranscriptionIndex = _handleTranscription(
+                message.inputTranscription, _inputTranscriptionIndex, true);
 
-          _outputTranscriptionIndex = _handleTranscription(
-            message.outputTranscription, _outputTranscriptionIndex, false);
+            _outputTranscriptionIndex = _handleTranscription(
+                message.outputTranscription, _outputTranscriptionIndex, false);
 
-          if (message.turnComplete == true) {
-            setState(() => _state = VoiceState.listening);
+            if (message.turnComplete == true) {
+              setState(() => _state = VoiceState.listening);
+            }
           }
         }
-      },
-      onError: (e) {
-        debugPrint('Live receive error: $e');
+      }
+    } catch (e) {
+      debugPrint('Live receive error: $e');
+      if (mounted) {
         setState(() {
           _state = VoiceState.error;
           _errorMessage = 'Connection error: ${e.toString()}';
         });
-      },
-      onDone: () {
-        if (_state != VoiceState.idle) {
-          setState(() => _state = VoiceState.idle);
-        }
-      },
-    );
+      }
+      return;
+    }
+
+    // Session closed or widget unmounted
+    if (mounted && _state != VoiceState.idle) {
+      setState(() => _state = VoiceState.idle);
+    }
   }
 
   int? _handleTranscription(
@@ -238,20 +266,179 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Future<void> _disconnect() async {
-    _receiveSubscription?.cancel();
-    _receiveSubscription = null;
     _recordSubscription?.cancel();
     _recordSubscription = null;
 
     try { await _audioOutput.stopStream(); } catch (_) {}
-    try { await _recorder.stop(); } catch (_) {}
+    try {
+      if (_recorder != null) {
+        await _recorder!.stop();
+        _recorder!.dispose();
+        _recorder = null;
+      }
+    } catch (_) {}
+    // Closing the session also terminates the await-for receive loop
     try { await _session?.close(); } catch (_) {}
     _session = null;
 
     _inputTranscriptionIndex = null;
     _outputTranscriptionIndex = null;
 
-    if (mounted) setState(() => _state = VoiceState.idle);
+    if (mounted) {
+      setState(() => _state = VoiceState.idle);
+
+      final shouldPrompt = widget.journalMode
+          ? _transcript.isNotEmpty && !_savedAsJournal
+          : _hasEnoughTranscript && !_savedAsJournal;
+
+      if (shouldPrompt) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) _showJournalPrompt();
+        });
+      }
+    }
+  }
+
+  bool get _hasEnoughTranscript {
+    if (_transcript.length < 3) return false;
+    final userChars = _transcript
+        .where((m) => m.isUser)
+        .fold<int>(0, (sum, m) => sum + m.text.length);
+    return userChars >= 50;
+  }
+
+  String _gatherTranscriptAsText() {
+    final buffer = StringBuffer();
+    for (final msg in _transcript) {
+      final label = msg.isUser ? 'User' : 'NILAA';
+      buffer.writeln('$label: ${msg.text}');
+    }
+    return buffer.toString();
+  }
+
+  void _showJournalPrompt() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_isSummarizing) ...[
+                const SizedBox(height: 12),
+                const CircularProgressIndicator(color: AppColors.primary),
+                const SizedBox(height: 16),
+                Text(
+                  'NILAA is writing it up...',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                Icon(Icons.auto_awesome_rounded,
+                    size: 32, color: AppColors.secondary),
+                const SizedBox(height: 12),
+                Text(
+                  'That was a good conversation!',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Want to save it as a journal entry?',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      setState(() => _isSummarizing = true);
+                      setSheetState(() {});
+                      await _summarizeAndNavigate();
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Save as Journal',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Maybe Later',
+                      style: TextStyle(color: AppColors.textSecondary)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _summarizeAndNavigate() async {
+    try {
+      final geminiService = ref.read(geminiServiceProvider);
+      final transcript = _gatherTranscriptAsText();
+      final result = await geminiService.summarizeConversation(transcript);
+
+      if (mounted) {
+        setState(() {
+          _isSummarizing = false;
+          _savedAsJournal = true;
+        });
+        Navigator.pushNamed(
+          context,
+          AppRoutes.journalEditor,
+          arguments: JournalEditorArgs(
+            prefillTitle: result.title,
+            prefillContent: result.body,
+            prefillTags: ['voice-journal'],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSummarizing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not summarize conversation'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   String get _statusText {
@@ -284,9 +471,9 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppColors.primary.withOpacity(0.06),
+              AppColors.primary.withValues(alpha: 0.06),
               AppColors.background,
-              AppColors.secondary.withOpacity(0.03),
+              AppColors.secondary.withValues(alpha: 0.03),
             ],
           ),
         ),
@@ -337,19 +524,41 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Widget _buildHeader() {
+    final canGoBack = Navigator.canPop(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          const SizedBox(width: 48),
+          if (canGoBack)
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () async {
+                if (_state == VoiceState.listening ||
+                    _state == VoiceState.speaking) {
+                  await _disconnect();
+                }
+                if (mounted) Navigator.pop(context);
+              },
+              color: AppColors.textPrimary,
+            )
+          else
+            const SizedBox(width: 48),
           Expanded(
             child: Text(
-              'Voice Chat',
+              widget.journalMode ? 'Voice & Journal' : 'Voice Chat',
               style: Theme.of(context).textTheme.titleLarge,
               textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(width: 48),
+          if (widget.journalMode && _hasEnoughTranscript && !_savedAsJournal)
+            IconButton(
+              icon: const Icon(Icons.save_rounded),
+              onPressed: _isSummarizing ? null : _showJournalPrompt,
+              color: AppColors.primary,
+              tooltip: 'Save as Journal',
+            )
+          else
+            const SizedBox(width: 48),
         ],
       ),
     );
@@ -388,7 +597,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.primary.withOpacity(0.15),
+                          color: AppColors.primary.withValues(alpha: 0.15),
                           width: 2,
                         ),
                       ),
@@ -412,7 +621,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                         color: (_state == VoiceState.listening
                                 ? AppColors.primary
                                 : AppColors.secondary)
-                            .withOpacity(0.15),
+                            .withValues(alpha: 0.15),
                       ),
                     ),
                   );
@@ -446,7 +655,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                                 : _state == VoiceState.speaking
                                     ? AppColors.secondary
                                     : AppColors.primary)
-                            .withOpacity(0.35),
+                            .withValues(alpha: 0.35),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -499,7 +708,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                 color: (_state == VoiceState.listening
                         ? AppColors.primary
                         : AppColors.secondary)
-                    .withOpacity(alpha),
+                    .withValues(alpha: alpha),
                 width: 1.5,
               ),
             ),
@@ -588,8 +797,8 @@ class _TranscriptBubble extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: message.isUser
-                  ? AppColors.primary.withOpacity(0.1)
-                  : AppColors.secondary.withOpacity(0.1),
+                  ? AppColors.primary.withValues(alpha: 0.1)
+                  : AppColors.secondary.withValues(alpha: 0.1),
             ),
             child: Icon(
               message.isUser ? Icons.person_rounded : Icons.auto_awesome_rounded,

@@ -525,6 +525,21 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
               textAlign: TextAlign.center,
             ),
           ),
+          if (!editorState.isTemplateMode)
+            IconButton(
+              icon: Icon(
+                editorState.isHighlight
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+              ),
+              onPressed: () => ref
+                  .read(journalEditorProvider.notifier)
+                  .toggleHighlight(),
+              color: editorState.isHighlight
+                  ? AppColors.accent
+                  : AppColors.textSecondary,
+              tooltip: editorState.isHighlight ? 'Remove highlight' : 'Highlight',
+            ),
           if (isEditing && !editorState.isTemplateMode)
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded),
