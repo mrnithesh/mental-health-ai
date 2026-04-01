@@ -10,18 +10,7 @@ final nicknameProvider =
     StateNotifierProvider<NicknameNotifier, String>((ref) {
   final firestoreService = ref.watch(firestoreServiceProvider);
   final geminiService = ref.watch(geminiServiceProvider);
-  final notifier = NicknameNotifier(firestoreService, geminiService);
-
-  // Listen to auth state changes and reload nickname when user changes
-  FirebaseAuth.instance.authStateChanges().listen((user) {
-    if (user != null) {
-      notifier.reload();
-    } else {
-      notifier.reset();
-    }
-  });
-
-  return notifier;
+  return NicknameNotifier(firestoreService, geminiService);
 });
 
 class NicknameNotifier extends StateNotifier<String> {
@@ -53,7 +42,10 @@ class NicknameNotifier extends StateNotifier<String> {
     }
   }
 
-  void reload() => _load();
+  Future<void> reload() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _load();
+  }
 
   void reset() {
     state = 'Friend';

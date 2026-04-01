@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/nickname_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../widgets/common/loading_button.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -43,9 +45,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           SnackBar(content: Text(error.toString())),
         );
       },
-      data: (_) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.main);
-      },
+      data: (_) => _navigateAfterAuth(),
     );
   }
 
@@ -61,9 +61,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           SnackBar(content: Text(error.toString())),
         );
       },
-      data: (_) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.main);
-      },
+      data: (_) => _navigateAfterAuth(),
+    );
+  }
+
+  Future<void> _navigateAfterAuth() async {
+    ref.read(nicknameProvider.notifier).reload();
+    final done = await ref.read(firestoreServiceProvider).hasCompletedOnboarding();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(
+      done ? AppRoutes.main : AppRoutes.onboarding,
     );
   }
 

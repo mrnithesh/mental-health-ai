@@ -40,6 +40,19 @@ class FirestoreService {
     await updateUserPreference('voiceId', voiceId);
   }
 
+  Future<bool> hasCompletedOnboarding() async {
+    try {
+      final prefs = await getUserPreferences();
+      return prefs['onboardingComplete'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setOnboardingComplete() async {
+    await updateUserPreference('onboardingComplete', true);
+  }
+
   Future<String> getNickname() async {
     final prefs = await getUserPreferences();
     return prefs['nickname'] as String? ?? '';

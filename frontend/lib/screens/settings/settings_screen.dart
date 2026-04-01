@@ -114,6 +114,7 @@ class SettingsScreen extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     ref.read(geminiServiceProvider).resetForNewUser();
+    ref.read(nicknameProvider.notifier).reset();
     await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/routes.dart';
 import '../../config/theme.dart';
+import '../../providers/service_providers.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -69,9 +70,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Validate the token is still valid (catches deleted accounts)
     try {
       await user.reload();
-      // reload() throws if the user was deleted from the console
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(AppRoutes.main);
+      final done = await ref.read(firestoreServiceProvider).hasCompletedOnboarding();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(
+        done ? AppRoutes.main : AppRoutes.onboarding,
+      );
     } catch (e) {
       debugPrint('Splash: user token invalid, signing out: $e');
       await FirebaseAuth.instance.signOut();

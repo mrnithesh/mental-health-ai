@@ -6,6 +6,7 @@ import '../../config/constants.dart';
 import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/nickname_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../widgets/voice_picker.dart';
 
@@ -63,6 +64,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       await ref.read(nicknameProvider.notifier).setNickname(nickname);
     }
     await ref.read(voicePreferenceProvider.notifier).setVoice(_selectedVoice);
+    await ref.read(firestoreServiceProvider).setOnboardingComplete();
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.main);
   }
