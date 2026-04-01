@@ -32,11 +32,13 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   String? _errorMessage;
   bool _savedAsJournal = false;
   bool _isSummarizing = false;
-
+  bool _isMuted = false;
   LiveSession? _session;
   AudioRecorder? _recorder;
   final AudioOutput _audioOutput = AudioOutput();
   StreamSubscription? _recordSubscription;
+  Timer? _durationTimer;
+  Duration _sessionDuration = Duration.zero;
 
   late AnimationController _pulseController;
   late AnimationController _waveController;
@@ -44,8 +46,16 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   late Animation<double> _pulseAnimation;
   late Animation<double> _breatheAnimation;
 
-  int? _inputTranscriptionIndex;
-  int? _outputTranscriptionIndex;
+  // Index of the transcript message currently being appended to for each speaker.
+  // Set to null when that speaker's utterance has finished, so the next chunk
+  // from the same speaker always creates a brand-new message bubble.
+  int? _currentUserMessageIndex;
+  int? _currentAIMessageIndex;
+
+  // Whether the most recent utterance for each speaker has been marked finished.
+  // Starts true so the very first chunk always creates a new message.
+  bool _userUtteranceFinished = true;
+  bool _aiUtteranceFinished = true;
 
   @override
   void initState() {
@@ -80,6 +90,8 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     _pulseController.dispose();
     _waveController.dispose();
     _breatheController.dispose();
+    _durationTimer?.cancel();
+    _durationTimer = null;
     _disconnect();
     _audioOutput.dispose();
     super.dispose();
@@ -106,8 +118,13 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Future<void> _connect() async {
+    debugPrint('[VOICE] ═══════════════════════════════════════');
+    debugPrint('[VOICE] 🎤 STARTING VOICE CHAT SESSION');
+    debugPrint('[VOICE] ═══════════════════════════════════════');
+
     final hasPermission = await _requestMicPermission();
     if (!hasPermission) {
+      debugPrint('[VOICE] ❌ Microphone permission denied');
       setState(() {
         _state = VoiceState.error;
         _errorMessage = 'Microphone permission is required for voice chat';
@@ -115,29 +132,51 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       return;
     }
 
+    debugPrint('[VOICE] ✅ Microphone permission granted');
     setState(() {
       _state = VoiceState.connecting;
       _errorMessage = null;
+      _sessionDuration = Duration.zero;
+      _transcript.clear();
+      // Reset all transcription tracking state for the new session
+      _currentUserMessageIndex = null;
+      _currentAIMessageIndex = null;
+      _userUtteranceFinished = true;
+      _aiUtteranceFinished = true;
     });
 
     try {
+      debugPrint('[VOICE] Initializing audio output...');
       await _audioOutput.init();
       await _audioOutput.playStream();
+      debugPrint('[VOICE] ✅ Audio output initialized');
 
+      debugPrint('[VOICE] Connecting to Gemini Live API...');
       final geminiService = ref.read(geminiServiceProvider);
-      debugPrint('Connecting to Gemini Live API...');
       _session = await geminiService.connectLive();
-      debugPrint('Connected! Starting receive and record...');
+      debugPrint('[VOICE] ✅ Connected to Gemini Live API');
 
+      // Start duration timer
+      _durationTimer?.cancel();
+      _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        setState(() {
+          _sessionDuration = Duration(seconds: timer.tick);
+        });
+      });
+
+      debugPrint('[VOICE] Starting receive and record handlers...');
       unawaited(_startReceiving());
       await _startRecording();
 
+      debugPrint('[VOICE] ✅ Session ready - waiting for user input');
       setState(() {
         _state = VoiceState.listening;
+        ref.read(voiceSessionActiveProvider.notifier).state = true;
       });
     } catch (e, stack) {
-      debugPrint('Voice connect error: $e');
-      debugPrint('Stack: $stack');
+      debugPrint('[VOICE] ❌ Connection error: $e');
+      debugPrint('[VOICE] Stack trace: $stack');
+      ref.read(voiceSessionActiveProvider.notifier).state = false;
       setState(() {
         _state = VoiceState.error;
         _errorMessage =
@@ -173,23 +212,33 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       ),
     );
 
+    debugPrint('[VOICE] Recording started, streaming audio to Gemini...');
     _recordSubscription = stream.listen(
       (data) {
-        if (_session != null && _state != VoiceState.speaking) {
+        if (_session != null && !_isMuted) {
+          debugPrint('[VOICE] Sending audio chunk: ${data.length} bytes');
           _session!.sendAudioRealtime(
             InlineDataPart('audio/pcm;rate=16000', data),
           );
+        } else if (_isMuted) {
+          debugPrint('[VOICE] Muted - audio not sent');
+        } else {
+          debugPrint('[VOICE] No active session - audio not sent');
         }
       },
       onError: (e) {
-        debugPrint('Recording error: $e');
+        debugPrint('[VOICE] ❌ Recording error: $e');
       },
     );
   }
 
   Future<void> _startReceiving() async {
-    if (_session == null) return;
+    if (_session == null) {
+      debugPrint('[VOICE] ❌ No session available for receiving');
+      return;
+    }
 
+    debugPrint('[VOICE] ✅ Starting receive loop...');
     try {
       // The SDK's receive() breaks after each turnComplete, so we wrap it
       // in a while loop to restart listening for the next turn.
@@ -198,12 +247,15 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
           if (!mounted) break;
 
           final message = response.message;
+          debugPrint('[VOICE] 📨 Received message: $message');
 
           if (message is LiveServerContent) {
+            // Handle AI audio response
             if (message.modelTurn != null) {
               for (final part in message.modelTurn!.parts) {
                 if (part is InlineDataPart &&
                     part.mimeType.startsWith('audio')) {
+                  debugPrint('[VOICE] 🔊 AI Audio received: ${part.bytes.length} bytes');
                   _audioOutput.addData(part.bytes);
                   if (_state != VoiceState.speaking) {
                     setState(() => _state = VoiceState.speaking);
@@ -212,20 +264,38 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
               }
             }
 
-            _inputTranscriptionIndex = _handleTranscription(
-                message.inputTranscription, _inputTranscriptionIndex, true);
+            // Handle user input transcription
+            if (message.inputTranscription != null) {
+              debugPrint('[VOICE] 👤 User Input Transcription: ${message.inputTranscription?.text}');
+              _handleTranscription(message.inputTranscription, isUser: true);
+            }
 
-            _outputTranscriptionIndex = _handleTranscription(
-                message.outputTranscription, _outputTranscriptionIndex, false);
+            // Handle AI output transcription
+            if (message.outputTranscription != null) {
+              debugPrint('[VOICE] 🤖 AI Output Transcription: ${message.outputTranscription?.text}');
+              _handleTranscription(message.outputTranscription, isUser: false);
+            }
 
             if (message.turnComplete == true) {
-              setState(() => _state = VoiceState.listening);
+              debugPrint('[VOICE] ✅ Turn complete - resetting both speaker states, returning to listening');
+              // turnComplete is the most reliable signal that a full exchange
+              // (user spoke → AI responded) has finished. Reset BOTH speakers
+              // so the next utterance from either side always opens a fresh bubble.
+              // This is especially important for the user side because
+              // inputTranscription often never fires finished:true.
+              setState(() {
+                _aiUtteranceFinished = true;
+                _currentAIMessageIndex = null;
+                _userUtteranceFinished = true;
+                _currentUserMessageIndex = null;
+                _state = VoiceState.listening;
+              });
             }
           }
         }
       }
     } catch (e) {
-      debugPrint('Live receive error: $e');
+      debugPrint('[VOICE] ❌ Live receive error: $e');
       if (mounted) {
         setState(() {
           _state = VoiceState.error;
@@ -237,38 +307,93 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
     // Session closed or widget unmounted
     if (mounted && _state != VoiceState.idle) {
+      debugPrint('[VOICE] Session closed or widget unmounted');
       setState(() => _state = VoiceState.idle);
     }
   }
 
-  int? _handleTranscription(
-      Transcription? transcription, int? messageIndex, bool isUser) {
-    if (transcription?.text == null) return messageIndex;
+  /// Handles an incoming transcription chunk from either the user or the AI.
+  ///
+  /// Strategy:
+  /// - If the speaker's "utterance finished" flag is true, it means the previous
+  ///   utterance ended, so we ALWAYS create a brand-new message bubble.
+  /// - If the flag is false, the speaker is still mid-utterance, so we APPEND
+  ///   the new text to the existing bubble for a smooth live-transcription effect.
+  /// - When [Transcription.finished] is true, we mark the utterance as done so
+  ///   the NEXT chunk from this speaker will open a fresh bubble.
+  void _handleTranscription(Transcription? transcription, {required bool isUser}) {
+    if (transcription?.text == null || transcription!.text!.isEmpty) {
+      debugPrint('[VOICE] Skipping empty transcription');
+      return;
+    }
 
-    int? currentIndex = messageIndex;
+    final speaker = isUser ? '👤 User' : '🤖 AI';
+    final isFinished = transcription.finished ?? false;
+    debugPrint('[VOICE] $speaker - Text: "${transcription.text}", Finished: $isFinished');
 
-    if (currentIndex != null && currentIndex < _transcript.length) {
+    // Determine whether this speaker's previous utterance has finished.
+    // If it has (or we have no active message), we must start a new bubble.
+    final utteranceFinished = isUser ? _userUtteranceFinished : _aiUtteranceFinished;
+    int? currentIndex = isUser ? _currentUserMessageIndex : _currentAIMessageIndex;
+
+    if (utteranceFinished || currentIndex == null) {
+      // --- Start a brand-new message bubble ---
+      _transcript.add(_TranscriptMessage(
+        text: transcription.text!,
+        isUser: isUser,
+      ));
+      currentIndex = _transcript.length - 1;
+
+      if (isUser) {
+        _currentUserMessageIndex = currentIndex;
+        _userUtteranceFinished = false;
+      } else {
+        _currentAIMessageIndex = currentIndex;
+        _aiUtteranceFinished = false;
+      }
+
+      debugPrint('[VOICE] $speaker - ✨ NEW message created at index: $currentIndex');
+    } else {
+      // --- Append to the existing bubble (live streaming text) ---
+      final oldText = _transcript[currentIndex].text;
       _transcript[currentIndex] = _TranscriptMessage(
-        text: _transcript[currentIndex].text + transcription!.text!,
+        text: oldText + transcription.text!,
         isUser: isUser,
       );
-    } else {
-      _transcript.add(
-          _TranscriptMessage(text: transcription!.text!, isUser: isUser));
-      currentIndex = _transcript.length - 1;
+      debugPrint('[VOICE] $speaker - ➕ APPENDED to message at index $currentIndex '
+          '(total: ${_transcript[currentIndex].text.length} chars)');
     }
 
-    if (transcription.finished ?? false) {
-      currentIndex = null;
+    // When the utterance finishes, clear the active index and set the finished
+    // flag so the NEXT transcription event from this speaker opens a new bubble.
+    if (isFinished) {
+      if (isUser) {
+        _currentUserMessageIndex = null;
+        _userUtteranceFinished = true;
+        debugPrint('[VOICE] $speaker - ✅ User utterance FINISHED - next chunk will create new message');
+      } else {
+        _currentAIMessageIndex = null;
+        _aiUtteranceFinished = true;
+        debugPrint('[VOICE] $speaker - ✅ AI utterance FINISHED - next chunk will create new message');
+      }
     }
 
+    debugPrint('[VOICE] Total messages: ${_transcript.length}');
     setState(() {});
-    return currentIndex;
   }
 
   Future<void> _disconnect() async {
+    debugPrint('[VOICE] ══════════════════════════════════════');
+    debugPrint('[VOICE] 🛑 ENDING VOICE CHAT SESSION');
+    debugPrint('[VOICE] Session duration: ${_formatDuration(_sessionDuration)}');
+    debugPrint('[VOICE] Total messages: ${_transcript.length}');
+    debugPrint('[VOICE] ══════════════════════════════════════');
+
     _recordSubscription?.cancel();
     _recordSubscription = null;
+
+    _durationTimer?.cancel();
+    _durationTimer = null;
 
     try { await _audioOutput.stopStream(); } catch (_) {}
     try {
@@ -282,11 +407,17 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     try { await _session?.close(); } catch (_) {}
     _session = null;
 
-    _inputTranscriptionIndex = null;
-    _outputTranscriptionIndex = null;
+    // Reset transcription tracking
+    _currentUserMessageIndex = null;
+    _currentAIMessageIndex = null;
+    _userUtteranceFinished = true;
+    _aiUtteranceFinished = true;
 
     if (mounted) {
-      setState(() => _state = VoiceState.idle);
+      setState(() {
+        _state = VoiceState.idle;
+        ref.read(voiceSessionActiveProvider.notifier).state = false;
+      });
 
       final shouldPrompt = widget.journalMode
           ? _transcript.isNotEmpty && !_savedAsJournal
@@ -298,6 +429,10 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
         });
       }
     }
+  }
+
+  Future<void> _endSession() async {
+    await _disconnect();
   }
 
   bool get _hasEnoughTranscript {
@@ -454,116 +589,198 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
   Color get _statusColor {
     switch (_state) {
-      case VoiceState.idle: return AppColors.textSecondary;
-      case VoiceState.connecting: return AppColors.accent;
-      case VoiceState.listening: return AppColors.primary;
-      case VoiceState.speaking: return AppColors.secondary;
-      case VoiceState.error: return AppColors.error;
+      case VoiceState.idle:
+        return const Color(0xFF8A96B8);
+      case VoiceState.connecting:
+        return const Color(0xFF7C8CD3);
+      case VoiceState.listening:
+        return const Color(0xFF9B74FF);
+      case VoiceState.speaking:
+        return const Color(0xFF7CE3FF);
+      case VoiceState.error:
+        return const Color(0xFFFF6666);
     }
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<bool> _onWillPop() async {
+    final isActive = _state == VoiceState.listening || _state == VoiceState.speaking;
+    
+    if (isActive) {
+      final shouldLeave = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            'Quit Voice chat with Amigo',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to end the voice chat session?',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'NO',
+                style: TextStyle(color: AppColors.primary),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                'YES',
+                style: TextStyle(color: AppColors.error),
+              ),
+            ),
+          ],
+        ),
+      ) ?? false;
+
+      if (shouldLeave) {
+        await _disconnect();
+        return true;
+      }
+      return false;
+    }
+    
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primary.withValues(alpha: 0.06),
-              AppColors.background,
-              AppColors.secondary.withValues(alpha: 0.03),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Column(
-                  children: [
-                    const Spacer(flex: 1),
-                    _buildMicrophoneButton(),
-                    const SizedBox(height: 20),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      child: Text(
-                        _statusText,
-                        key: ValueKey(_state),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: _statusColor,
-                        ),
-                      ),
-                    ),
-                    if (_errorMessage != null) ...[
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.error),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
-                    const Spacer(flex: 1),
-                    _buildTranscriptArea(),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
+          children: [
+            // Perplexity-like dark gradient background
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF0A0F25),
+                    Color(0xFF121B3E),
+                    Color(0xFF0C1229),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+            ClipRRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0),
+                ),
+              ),
+            ),
+            // Content
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        const Spacer(flex: 1),
+                        _buildMicrophoneButton(),
+                        const SizedBox(height: 20),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: Text(
+                            _statusText,
+                            key: ValueKey(_state),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: _statusColor,
+                            ),
+                          ),
+                        ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppColors.error),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                        const Spacer(flex: 1),
+                        _buildTranscriptArea(),
+                      ],
+                    ),
+                  ),
+                  _buildBottomControls(),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildHeader() {
-    final canGoBack = Navigator.canPop(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          if (canGoBack)
-            IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () async {
-                if (_state == VoiceState.listening ||
-                    _state == VoiceState.speaking) {
-                  await _disconnect();
-                }
-                if (mounted) Navigator.pop(context);
-              },
-              color: AppColors.textPrimary,
-            )
-          else
-            const SizedBox(width: 48),
+          const SizedBox(width: 48),
+
+          // CENTER: Title with Duration
           Expanded(
-            child: Text(
-              widget.journalMode ? 'Voice & Journal' : 'Voice Chat',
-              style: Theme.of(context).textTheme.titleLarge,
-              textAlign: TextAlign.center,
+            child: Column(
+              children: [
+                Text(
+                  widget.journalMode ? 'Voice & Journal' : 'Voice Chat',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                if (_state == VoiceState.listening ||
+                    _state == VoiceState.speaking)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      _formatDuration(_sessionDuration),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textTertiary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (widget.journalMode && !_savedAsJournal)
-            IconButton(
-              icon: const Icon(Icons.save_rounded),
-              onPressed: _hasEnoughTranscript && !_isSummarizing
-                  ? _showJournalPrompt
-                  : null,
-              color: _hasEnoughTranscript
-                  ? AppColors.primary
-                  : AppColors.textTertiary,
-              tooltip: 'Save as Journal',
-            )
-          else
-            const SizedBox(width: 48),
+
+          // RIGHT: Placeholder for alignment
+          const SizedBox(width: 48),
         ],
       ),
     );
@@ -775,6 +992,114 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                       );
                     },
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomControls() {
+    final isActive =
+        _state == VoiceState.listening || _state == VoiceState.speaking;
+
+    if (!isActive) {
+      return const SizedBox(height: 80);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // End Session button (shown only when session active)
+          GestureDetector(
+            onTap: () async {
+              await _endSession();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFFA5252), Color(0xFFBA1A1A)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFBA1A1A).withOpacity(0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.close_rounded, size: 20, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    'End Session',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          // Mute button
+          GestureDetector(
+            onTap: () {
+              setState(() => _isMuted = !_isMuted);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: _isMuted
+                      ? const [Color(0xFF4B5563), Color(0xFF374151)]
+                      : const [Color(0xFF3A9B5A), Color(0xFF2D6A3E)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_isMuted
+                            ? const Color(0xFF4B5563)
+                            : const Color(0xFF3A9B5A))
+                        .withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isMuted ? 'Muted' : 'Mute',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
