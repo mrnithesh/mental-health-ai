@@ -550,7 +550,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 colors: [_P.teal, _P.tealDark],
               ),
               borderRadius: BorderRadius.circular(12),
-              boxShadow: const [BoxShadow(color: Color(0x261FB8A0), blurRadius: 8, offset: Offset(0, 3))],
+              boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 3))],
             ),
             child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
           ),
@@ -591,64 +591,55 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               onTap: _showSaveConfirmation,
             )
           else ...[
-            // Private toggle
-            GestureDetector(
-              onTap: () {
-                ref.read(chatSessionProvider.notifier).togglePrivate();
-                setState(() {});
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _isPrivate ? _P.tealLight : _P.surfaceAlt,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: _isPrivate ? _P.teal.withOpacity(0.4) : _P.border,
+            // Save to journal button
+            if (_canSaveAsJournal && !_savedAsJournal)
+              GestureDetector(
+                onTap: !_isSummarizing ? _showSaveConfirmation : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _P.tealLight,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _P.teal.withValues(alpha: 0.25)),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.book_rounded, size: 15, color: _P.teal),
+                      const SizedBox(width: 5),
+                      Text('Journal',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                              color: _P.teal)),
+                    ],
+                  ),
+                ),
+              )
+            else if (_savedAsJournal)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _P.tealLight,
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      _isPrivate ? Icons.lock_rounded : Icons.lock_open_rounded,
-                      size: 13,
-                      color: _isPrivate ? _P.teal : _P.textSecondary,
-                    ),
+                    Icon(Icons.check_rounded, size: 15, color: _P.teal),
                     const SizedBox(width: 4),
-                    Text(
-                      _isPrivate ? 'Private' : 'Saved',
-                      style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w600,
-                        color: _isPrivate ? _P.teal : _P.textSecondary,
-                      ),
-                    ),
+                    Text('Saved', style: TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w600, color: _P.teal)),
                   ],
                 ),
               ),
-            ),
             const SizedBox(width: 8),
 
-            // Journal save icon
-            GestureDetector(
-              onTap: _canSaveAsJournal && !_savedAsJournal && !_isSummarizing
-                  ? _showSaveConfirmation : null,
-              child: Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: _savedAsJournal
-                      ? _P.tealLight
-                      : _canSaveAsJournal ? _P.surfaceAlt : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  _savedAsJournal ? Icons.check_circle_rounded : Icons.note_add_rounded,
-                  size: 20,
-                  color: _savedAsJournal
-                      ? _P.teal
-                      : _canSaveAsJournal ? _P.textPrimary : _P.textHint,
-                ),
-              ),
+            // Private / Saved toggle with expanding label animation
+            _PrivateToggle(
+              isPrivate: _isPrivate,
+              onTap: () {
+                ref.read(chatSessionProvider.notifier).togglePrivate();
+                setState(() {});
+              },
             ),
           ],
         ],
@@ -997,6 +988,119 @@ class _JournalSaveButton extends StatelessWidget {
                 fontSize: 12, fontWeight: FontWeight.w700,
                 color: saved ? _P.teal : canSave ? Colors.white : _P.textHint,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Private / Saved animated toggle ──────────────────────────────────────────
+
+class _PrivateToggle extends StatefulWidget {
+  final bool isPrivate;
+  final VoidCallback onTap;
+
+  const _PrivateToggle({required this.isPrivate, required this.onTap});
+
+  @override
+  State<_PrivateToggle> createState() => _PrivateToggleState();
+}
+
+class _PrivateToggleState extends State<_PrivateToggle>
+    with SingleTickerProviderStateMixin {
+  bool _showLabel = false;
+  Timer? _collapseTimer;
+
+  @override
+  void didUpdateWidget(_PrivateToggle old) {
+    super.didUpdateWidget(old);
+    if (old.isPrivate != widget.isPrivate) {
+      _expandLabel();
+    }
+  }
+
+  void _expandLabel() {
+    _collapseTimer?.cancel();
+    setState(() => _showLabel = true);
+    _collapseTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _showLabel = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _collapseTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPrivate = widget.isPrivate;
+    final bgColor = isPrivate
+        ? AppColors.accent.withValues(alpha: 0.12)
+        : _P.teal.withValues(alpha: 0.08);
+    final fgColor = isPrivate ? AppColors.accent : _P.teal;
+    final borderColor = isPrivate
+        ? AppColors.accent.withValues(alpha: 0.35)
+        : _P.teal.withValues(alpha: 0.2);
+
+    return GestureDetector(
+      onTap: () {
+        widget.onTap();
+        _expandLabel();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        height: 36,
+        padding: EdgeInsets.symmetric(
+          horizontal: _showLabel ? 12 : 9,
+        ),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, anim) => ScaleTransition(
+                scale: anim,
+                child: child,
+              ),
+              child: Icon(
+                isPrivate
+                    ? Icons.visibility_off_rounded
+                    : Icons.cloud_done_rounded,
+                key: ValueKey(isPrivate),
+                size: 17,
+                color: fgColor,
+              ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              child: _showLabel
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          isPrivate ? 'Private' : 'Saved',
+                          key: ValueKey('label_$isPrivate'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: fgColor,
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),

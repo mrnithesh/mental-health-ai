@@ -104,6 +104,7 @@ class AmigoVoice {
   final String voiceCode;
   final String description;
   final String personality;
+  final String sampleText;
   final IconData icon;
   final bool isAvailable;
 
@@ -113,6 +114,7 @@ class AmigoVoice {
     required this.voiceCode,
     required this.description,
     required this.personality,
+    this.sampleText = '',
     required this.icon,
     this.isAvailable = false,
   });
@@ -126,6 +128,7 @@ class AmigoVoice {
       voiceCode: 'Leda',
       description: 'Warm & gentle (Female)',
       personality: 'You are Nila — a warm, empathetic female companion. You speak softly and gently, like a caring older sister. You are nurturing, patient, and always make the user feel safe and heard.',
+      sampleText: "Hi! I'm நிலா, I'll be here whenever you need to talk.",
       icon: IconData(0xe491, fontFamily: 'MaterialIcons'),
       isAvailable: true,
     ),
@@ -135,6 +138,7 @@ class AmigoVoice {
       voiceCode: 'Fenrir',
       description: 'Calm & steady (Male)',
       personality: 'You are Amigo — a calm, grounded male companion. You have a steady, reassuring presence like a trusted best friend. You are laid-back, supportive, and encourage the user with quiet confidence.',
+      sampleText: "Hey there! I'm Amigo. Let's chat about anything on your mind.",
       icon: IconData(0xe491, fontFamily: 'MaterialIcons'),
       isAvailable: true,
     ),

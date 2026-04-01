@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../config/constants.dart';
 import '../../config/routes.dart';
@@ -90,6 +91,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     _pulseController.dispose();
     _waveController.dispose();
     _breatheController.dispose();
@@ -176,6 +178,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       unawaited(_startReceiving());
       await _startRecording();
 
+      WakelockPlus.enable();
       debugPrint('[VOICE] ✅ Session ready - waiting for user input');
       setState(() {
         _state = VoiceState.listening;
@@ -223,7 +226,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     debugPrint('[VOICE] Recording started, streaming audio to Gemini...');
     _recordSubscription = stream.listen(
       (data) {
-        if (_session != null && !_isMuted) {
+        if (_session != null && _state != VoiceState.speaking && !_isMuted) {
           debugPrint('[VOICE] Sending audio chunk: ${data.length} bytes');
           _session!.sendAudioRealtime(
             InlineDataPart('audio/pcm;rate=16000', data),
@@ -391,6 +394,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Future<void> _disconnect() async {
+    WakelockPlus.disable();
     debugPrint('[VOICE] ══════════════════════════════════════');
     debugPrint('[VOICE] 🛑 ENDING VOICE CHAT SESSION');
     debugPrint('[VOICE] Session duration: ${_formatDuration(_sessionDuration)}');

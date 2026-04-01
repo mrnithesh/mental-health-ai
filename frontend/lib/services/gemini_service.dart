@@ -115,6 +115,55 @@ Guidelines:
     _rebuildChatModel();
   }
 
+  /// Play a short voice preview using Gemini Live API with the given voice.
+  /// The caller must init and dispose the [audioOutput].
+  Future<void> previewVoice({
+    required String voiceCode,
+    required String sampleText,
+    required dynamic audioOutput,
+    VoidCallback? onFirstAudio,
+  }) async {
+    final ai = FirebaseAI.googleAI(auth: FirebaseAuth.instance);
+    final model = ai.liveGenerativeModel(
+      model: _liveModel,
+      systemInstruction: Content.system(
+        'Say exactly what the user asks. Keep it natural and warm with a friendly Indian accent. Do not add anything extra.',
+      ),
+      liveGenerationConfig: LiveGenerationConfig(
+        speechConfig: SpeechConfig(voiceName: voiceCode),
+        responseModalities: [ResponseModalities.audio],
+      ),
+    );
+
+    LiveSession? session;
+    try {
+      session = await model.connect();
+      await session.send(
+        input: Content.text('Say this exactly: $sampleText'),
+        turnComplete: true,
+      );
+
+      await for (final response in session.receive()) {
+        final message = response.message;
+          if (message is LiveServerContent) {
+          if (message.modelTurn != null) {
+            for (final part in message.modelTurn!.parts) {
+              if (part is InlineDataPart &&
+                  part.mimeType.startsWith('audio')) {
+                onFirstAudio?.call();
+                onFirstAudio = null;
+                audioOutput.addData(part.bytes);
+              }
+            }
+          }
+          if (message.turnComplete == true) break;
+        }
+      }
+    } finally {
+      try { await session?.close(); } catch (_) {}
+    }
+  }
+
   void resetForNewUser() {
     _currentUserName = 'Friend';
     _currentPersonality = _defaultPersonality;
@@ -166,8 +215,9 @@ Guidelines:
   /// Summarize a journal entry in one sentence.
   Future<String> generateJournalSummary(String content) async {
     const prompt =
-        'Summarize this journal entry in one sentence (max 80 characters). '
-        'Be descriptive and specific, not generic. Match the language of the entry.\n\n';
+        'Write a one-line summary (max 80 chars) of this journal entry. '
+        'Make it specific and personal, not generic. Use the same language as the entry '
+        '(Tamil/English/Tanglish). It should read like a note-to-self, not a headline.\n\n';
 
     try {
       final response = await _chatModel.generateContent([
@@ -183,9 +233,15 @@ Guidelines:
   /// Generate a warm, supportive reflection on a journal entry.
   Future<String> generateJournalInsight(String content) async {
     final prompt = '''
-Read the following journal entry and provide a brief, warm, supportive reflection as $_currentVoiceName (a caring friend). 
-Keep it to 2-3 sentences. Be empathetic, validate their feelings, and if appropriate offer a gentle positive reframe or encouragement. 
-Do not repeat what they wrote. Do not diagnose or prescribe. Match the language of the journal entry.
+You are $_currentVoiceName, reading your friend's journal entry. Write a short, personal response — like a text message from a close friend who truly gets it.
+
+Rules:
+- Match their language exactly (Tamil, English, Tanglish — whatever they used). If they wrote in Tanglish, respond in Tanglish.
+- 2-3 sentences max. Be real, not generic. Reference something specific they wrote.
+- Don't repeat what they said back to them. Don't start with "I can see that..." or "It sounds like...".
+- If they were being funny or casual, match that energy. If they were hurting, be gentle.
+- No diagnosis, no advice unless it's very light ("maybe take a breather?" level). No therapist-speak.
+- It should feel like a warm voice note, not a counseling session.
 
 Journal entry:
 ''';
@@ -206,18 +262,26 @@ Journal entry:
   Future<({String title, String body})> summarizeConversation(
       String formattedTranscript) async {
     final prompt = '''
-Transform this conversation into a first-person journal entry.
+You are ghostwriting a personal journal entry for someone based on their conversation.
+
+Read the conversation below carefully. Pay close attention to:
+1. The LANGUAGE the user actually uses — if they speak in Tamil, write in Tamil. If they mix Tamil and English (Tanglish), write in that same mixed style. If pure English, write in English. Mirror their exact linguistic style, slang, and phrasing patterns.
+2. The TONE — are they venting, reflecting, excited, sad, confused? Match that emotional register. Don't sanitize or formalize raw emotions.
+3. The DEPTH — if the conversation was casual/light, keep the journal light. If it was deep and emotional, go deeper. Don't manufacture profundity that wasn't there.
+
+Write a first-person journal entry as if $_currentUserName sat down and wrote it naturally — not a summary or report of the conversation, but their own thoughts flowing onto the page.
+
 Rules:
-- Write as if the user is journaling about what they discussed
-- Keep their voice, language, and tone (Tamil/English/Tanglish as used)
-- Focus on feelings, realizations, and takeaways
-- Do NOT quote $_currentVoiceName directly -- weave insights naturally
-- Clean up any transcript fragments or errors
-- Aim for 150-300 words
-- Return in this exact format:
-  TITLE: <short descriptive title, max 60 chars>
-  ---
-  <journal body>
+- Use "I" voice throughout. Write like a real person thinks — messy, honest, with natural pauses and fragments if that matches their style.
+- NEVER mention $_currentVoiceName, "AI", "chatbot", or "conversation". It should read like the person journaled independently.
+- Weave in any realizations or reframes that came up, but make them feel self-discovered, not told.
+- Keep it 150-250 words. Don't pad with generic reflection. Every sentence should carry meaning from the actual conversation.
+- If the conversation had humor or lightness, keep that energy. Don't make everything heavy and "deep".
+
+Return in this exact format:
+TITLE: <a short, natural title in the user's language, max 60 chars — like something they'd name a note, not a newspaper headline>
+---
+<journal body>
 
 Conversation:
 ''';
