@@ -230,8 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: (ok ? AppColors.success : AppColors.error)
-              .withValues(alpha: 0.1),
+          color: (ok ? AppColors.success : AppColors.error).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -264,14 +263,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryDark],
+          colors: [Color(0xFF2D6A3E), Color(0xFF1B4D2B)],
         ),
         borderRadius: BorderRadius.circular(AppRadius.xl),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF2D6A3E).withValues(alpha: 0.4),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -283,17 +282,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Row(
               children: [
                 Container(
-                  width: 48, height: 48,
+                  width: 52, height: 52,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(14),
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Colors.white, size: 26,
-                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 28),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,11 +305,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
                         'I\'m here whenever you need',
                         style: tt.bodySmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.8),
+                          color: Colors.white.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
@@ -317,7 +317,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
@@ -345,50 +345,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildDailyPrompt(TextTheme tt) {
     return GlassCard(
-      padding: const EdgeInsets.all(18),
-      backgroundColor: AppColors.accent.withValues(alpha: 0.08),
-      border: Border.all(color: AppColors.accent.withValues(alpha: 0.15)),
+      padding: const EdgeInsets.all(20),
+      backgroundColor: const Color(0xFF3A9B5A).withValues(alpha: 0.08),
+      border: Border.all(
+        color: const Color(0xFF4A7C59).withValues(alpha: 0.25),
+        width: 1.5,
+      ),
       child: InkWell(
         onTap: _dailyPrompt != null
             ? () => Navigator.pushNamed(
                   context,
                   AppRoutes.journalEditor,
-                  arguments: JournalEditorArgs(
-                    prefillTitle: _dailyPrompt,
-                  ),
+                  arguments: JournalEditorArgs(prefillTitle: _dailyPrompt),
                 )
             : null,
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Row(
           children: [
             Container(
-              width: 44, height: 44,
+              width: 48, height: 48,
               decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF3A9B5A), Color(0xFF2E8B57)],
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
-              child: const Icon(
-                Icons.lightbulb_rounded,
-                color: AppColors.accent, size: 22,
-              ),
+              child: const Icon(Icons.lightbulb_rounded, color: Colors.white, size: 24),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Daily Prompt',
-                    style: tt.titleSmall?.copyWith(color: AppColors.textPrimary),
+                    style: tt.titleSmall?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   if (_loadingPrompt)
                     const SizedBox(
-                      height: 14,
-                      width: 14,
+                      height: 14, width: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.accent,
+                        color: Color(0xFF3A9B5A),
                       ),
                     )
                   else
@@ -396,100 +400,199 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _dailyPrompt ?? '',
                       style: tt.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
-                        height: 1.4,
+                        height: 1.5,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                 ],
               ),
             ),
             if (!_loadingPrompt)
-              Icon(Icons.arrow_forward_ios_rounded,
-                  size: 14, color: AppColors.textTertiary),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFF4A7C59)),
           ],
         ),
       ),
     );
   }
 
+  // ── Mood check-in ──────────────────────────────────────────────────────────
+  // After the user taps an emoji:
+  //   • The 5-emoji picker row collapses via AnimatedSize (height → 0)
+  //   • A compact summary pill fades + slides in to take the minimal space
+  //   • The streak card below animates upward naturally because the Column
+  //     shrinks — no manual offset needed; AnimatedSize handles the reflow.
+  // Tapping the pencil icon on the pill reopens the picker.
+
   Widget _buildMoodCheckin(TextTheme tt) {
     const moods = [
-      (emoji: '😊', label: 'Great', score: 5, color: AppColors.moodExcellent),
-      (emoji: '🙂', label: 'Good', score: 4, color: AppColors.moodGood),
-      (emoji: '😐', label: 'Okay', score: 3, color: AppColors.moodNeutral),
-      (emoji: '😔', label: 'Low', score: 2, color: AppColors.moodBad),
-      (emoji: '😢', label: 'Rough', score: 1, color: AppColors.moodTerrible),
+      (emoji: '😊', label: 'Great',  score: 5, color: AppColors.moodExcellent),
+      (emoji: '🙂', label: 'Good',   score: 4, color: AppColors.moodGood),
+      (emoji: '😐', label: 'Okay',   score: 3, color: AppColors.moodNeutral),
+      (emoji: '😔', label: 'Low',    score: 2, color: AppColors.moodBad),
+      (emoji: '😢', label: 'Rough',  score: 1, color: AppColors.moodTerrible),
     ];
+
+    final selectedMood = _selectedMood != null
+        ? moods.firstWhere((m) => m.score == _selectedMood, orElse: () => moods[2])
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header row
         Row(
           children: [
             Expanded(
-              child: Text(
-                _moodSaved ? 'Today\'s Mood' : 'How are you feeling?',
-                style: tt.titleMedium?.copyWith(color: AppColors.textPrimary),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: Align(
+                  key: ValueKey(_moodSaved),
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _moodSaved ? 'Today\'s Mood' : 'How are you feeling?',
+                    style: tt.titleMedium?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
             ),
             GestureDetector(
               onTap: () => Navigator.pushNamed(context, AppRoutes.moodHistory),
-              child: Text(
-                'See trends',
-                style: tt.labelSmall?.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A9B5A).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF4A7C59).withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  'See trends',
+                  style: tt.labelSmall?.copyWith(
+                    color: const Color(0xFF3A9B5A),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: moods.map((mood) {
-            final isSelected = _selectedMood == mood.score;
-            return GestureDetector(
-              onTap: () => _saveMood(mood.score),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 56, height: 56,
+        const SizedBox(height: 14),
+
+        // ── Emoji picker — AnimatedSize collapses it to zero height ─────────
+        AnimatedSize(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOutCubic,
+          alignment: Alignment.topCenter,
+          child: _moodSaved
+              ? const SizedBox(width: double.infinity) // zero-height placeholder
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: moods.map((mood) {
+                    final isSelected = _selectedMood == mood.score;
+                    return GestureDetector(
+                      onTap: () => _saveMood(mood.score),
+                      child: Column(
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: isSelected
+                                    ? [mood.color, mood.color.withValues(alpha: 0.7)]
+                                    : [mood.color.withValues(alpha: 0.12), mood.color.withValues(alpha: 0.06)],
+                              ),
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              border: Border.all(
+                                color: isSelected ? mood.color : mood.color.withValues(alpha: 0.2),
+                                width: isSelected ? 2 : 1,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(mood.emoji, style: const TextStyle(fontSize: 28)),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            mood.label,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isSelected ? mood.color : AppColors.textSecondary,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ),
+
+        // ── Compact summary pill — slides down and fades in after selection ──
+        AnimatedSize(
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.easeInOutCubic,
+          alignment: Alignment.topCenter,
+          child: (_moodSaved && selectedMood != null)
+              ? TweenAnimationBuilder<double>(
+                  // Re-trigger on each new selection by keying on score
+                  key: ValueKey(_selectedMood),
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 360),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) => Opacity(
+                    opacity: value,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - value) * 10),
+                      child: child,
+                    ),
+                  ),
+                  child: GestureDetector(
+                    // Tap edit icon → reopen picker
+                    onTap: () => setState(() {
+                      _moodSaved = false;
+                      _selectedMood = null;
+                    }),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? mood.color.withValues(alpha: 0.2)
-                            : mood.color.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        color: selectedMood.color.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: isSelected
-                              ? mood.color
-                              : mood.color.withValues(alpha: 0.15),
-                          width: isSelected ? 2 : 1,
+                          color: selectedMood.color.withValues(alpha: 0.28),
                         ),
                       ),
-                      child: Center(
-                        child: Text(mood.emoji,
-                            style: const TextStyle(fontSize: 26)),
+                      child: Row(
+                        children: [
+                          Text(selectedMood.emoji, style: const TextStyle(fontSize: 24)),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Feeling ${selectedMood.label.toLowerCase()} today',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: selectedMood.color,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.edit_rounded,
+                            size: 15,
+                            color: selectedMood.color.withValues(alpha: 0.55),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      mood.label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isSelected
-                            ? mood.color
-                            : AppColors.textSecondary,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
         ),
       ],
     );
@@ -500,8 +603,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final today = DateTime.now().weekday;
 
     return GlassCard(
-      padding: const EdgeInsets.all(18),
-      backgroundColor: AppColors.surface,
+      padding: const EdgeInsets.all(20),
+      backgroundColor: const Color(0xFF2D6A3E).withValues(alpha: 0.08),
+      border: Border.all(
+        color: const Color(0xFF4A7C59).withValues(alpha: 0.25),
+        width: 1.5,
+      ),
       child: Column(
         children: [
           Row(
@@ -509,35 +616,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Expanded(
                 child: Text(
                   'Your Streak',
-                  style: tt.titleMedium?.copyWith(color: AppColors.textPrimary),
+                  style: tt.titleMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: _streakDays > 0
-                      ? AppColors.accent.withValues(alpha: 0.12)
-                      : AppColors.surfaceVariant,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: _streakDays > 0
+                        ? [const Color(0xFFE8A838).withValues(alpha: 0.2), const Color(0xFFE8A838).withValues(alpha: 0.1)]
+                        : [AppColors.surfaceVariant, AppColors.surfaceVariant.withValues(alpha: 0.5)],
+                  ),
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _streakDays > 0
+                        ? const Color(0xFFE8A838).withValues(alpha: 0.3)
+                        : AppColors.surfaceVariant.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       _streakDays > 0 ? '🔥' : '💤',
-                      style: const TextStyle(fontSize: 14),
+                      style: const TextStyle(fontSize: 16),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Text(
                       _streakDays > 0
                           ? '$_streakDays day${_streakDays == 1 ? '' : 's'}'
                           : 'Start today!',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: _streakDays > 0
-                            ? AppColors.accent
+                            ? const Color(0xFFE8A838)
                             : AppColors.textTertiary,
                       ),
                     ),
@@ -546,7 +664,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(7, (i) {
@@ -555,39 +673,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               return Column(
                 children: [
                   AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 36, height: 36,
+                    duration: const Duration(milliseconds: 250),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isActive
-                          ? AppColors.primary
-                          : isToday
-                              ? AppColors.primary.withValues(alpha: 0.1)
-                              : AppColors.surfaceVariant,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: isActive
+                            ? [const Color(0xFF3A9B5A), const Color(0xFF2D6A3E)]
+                            : isToday
+                                ? [const Color(0xFF3A9B5A).withValues(alpha: 0.2), const Color(0xFF3A9B5A).withValues(alpha: 0.1)]
+                                : [AppColors.surfaceVariant, AppColors.surfaceVariant.withValues(alpha: 0.5)],
+                      ),
                       border: isToday && !isActive
                           ? Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.4),
+                              color: const Color(0xFF3A9B5A).withValues(alpha: 0.5),
                               width: 1.5,
                             )
+                          : null,
+                      boxShadow: isActive
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF3A9B5A).withValues(alpha: 0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
                           : null,
                     ),
                     child: Center(
                       child: isActive
-                          ? const Icon(Icons.check_rounded,
-                              color: Colors.white, size: 18)
+                          ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
                           : null,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     dayLabels[i],
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight:
-                          isToday ? FontWeight.w700 : FontWeight.w500,
-                      color: isToday
-                          ? AppColors.primary
-                          : AppColors.textTertiary,
+                      fontSize: 12,
+                      fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+                      color: isToday ? const Color(0xFF3A9B5A) : AppColors.textTertiary,
                     ),
                   ),
                 ],
@@ -614,7 +742,7 @@ class _HeroButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.18),
+      color: Colors.white.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,

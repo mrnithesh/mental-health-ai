@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/theme.dart';
+import '../providers/voice_provider.dart';
 import 'home/home_screen.dart';
 import 'chat/chat_screen.dart';
 import 'voice/voice_chat_screen.dart';
 import 'journal/journal_list_screen.dart';
 import 'settings/settings_screen.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
   MainShellState createState() => MainShellState();
 }
 
-class MainShellState extends State<MainShell> {
+class MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
 
   static MainShellState? of(BuildContext context) =>
@@ -36,13 +38,18 @@ class MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final isVoiceScreen = _currentIndex == 2;
+    final voiceSessionActive = ref.watch(voiceSessionActiveProvider);
+    final hideNavBar = isVoiceScreen && voiceSessionActive;
+    final hideVoiceFab = _currentIndex == 1 || hideNavBar;
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: _screens,
       ),
-      bottomNavigationBar: _buildBottomBar(),
-      floatingActionButton: _currentIndex == 1 ? null : _buildVoiceFab(),
+      bottomNavigationBar: hideNavBar ? null : _buildBottomBar(),
+      floatingActionButton: hideVoiceFab ? null : _buildVoiceFab(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }

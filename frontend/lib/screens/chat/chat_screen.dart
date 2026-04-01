@@ -11,6 +11,40 @@ import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 
+// ─── Perplexity-inspired light palette ────────────────────────────────────────
+class _P {
+  // Backgrounds
+  static const bg         = Color(0xFFFAFAF8);      // warm off-white page
+  static const surface    = Color(0xFFFFFFFF);       // pure white cards/bubbles
+  static const surfaceAlt = Color(0xFFF4F4F1);       // very light warm gray
+  static const inputBg    = Color(0xFFFFFFFF);       // always white so text is visible
+
+  // Borders
+  static const border     = Color(0xFFE5E5E0);
+  static const borderFocus= Color(0xFF1FB8A0);       // teal focus ring
+
+  // Perplexity teal/cyan accent
+  static const teal       = Color(0xFF1FB8A0);
+  static const tealLight  = Color(0xFFE6F7F5);
+  static const tealDark   = Color(0xFF178A77);
+
+  // User bubble: warm amber/gold (kept from original design identity)
+  static const userBubble    = Color(0xFF1FB8A0);    // switched to teal for cohesion
+  static const userBubbleDark= Color(0xFF178A77);
+
+  // Text
+  static const textPrimary   = Color(0xFF1A1A18);
+  static const textSecondary = Color(0xFF6B6B63);
+  static const textHint      = Color(0xFFAFAFA8);
+  static const textOnTeal    = Color(0xFFFFFFFF);
+
+  // Utility
+  static const error      = Color(0xFFDC2626);
+  static const errorBg    = Color(0xFFFEF2F2);
+  static const online     = Color(0xFF22C55E);
+  static const shadow     = Color(0x0C000000);
+}
+
 class ChatScreen extends ConsumerStatefulWidget {
   final bool journalMode;
   final String? conversationId;
@@ -25,15 +59,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _inputFocusNode = FocusNode();
   final List<_ChatMessage> _messages = [];
-  bool _isTyping = false;
-  bool _isInputFocused = false;
-  bool _savedAsJournal = false;
-  bool _isSummarizing = false;
+
+  bool _isTyping         = false;
+  bool _isInputFocused   = false;
+  bool _savedAsJournal   = false;
+  bool _isSummarizing    = false;
   bool _isLoadingHistory = false;
+
   ChatSession? _chatSession;
   bool _conversationCreated = false;
-  int _userMessageCount = 0;
+  int  _userMessageCount    = 0;
 
   bool _isSelectionMode = false;
   final Set<int> _selectedIndices = {};
@@ -41,8 +78,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   late AnimationController _typingController;
   late VoidCallback _messageInputListener;
 
-  bool get _canSend => _messageController.text.trim().isNotEmpty;
+  bool get _canSend  => _messageController.text.trim().isNotEmpty;
   bool get _isPrivate => ref.read(chatSessionProvider).isPrivate;
+
+  // ── lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -52,10 +91,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       duration: const Duration(milliseconds: 600),
       vsync: this,
     )..repeat(reverse: true);
-    _messageInputListener = () {
-      if (mounted) setState(() {});
-    };
+
+    _messageInputListener = () { if (mounted) setState(() {}); };
     _messageController.addListener(_messageInputListener);
+
+    _inputFocusNode.addListener(() {
+      if (mounted) setState(() => _isInputFocused = _inputFocusNode.hasFocus);
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.conversationId != null) {
@@ -68,6 +110,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
+  @override
+  void dispose() {
+    _messageController.removeListener(_messageInputListener);
+    _messageController.dispose();
+    _scrollController.dispose();
+    _inputFocusNode.dispose();
+    _typingController.dispose();
+    super.dispose();
+  }
+
+  // ── conversation management ────────────────────────────────────────────────
+
   Future<void> _resumeConversation(String conversationId) async {
     setState(() => _isLoadingHistory = true);
     try {
@@ -75,17 +129,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       chatNotifier.resumeConversation(conversationId);
 
       final firestoreService = ref.read(firestoreServiceProvider);
-
-      final conversation = await firestoreService.getConversation(conversationId);
-      final contextSummary = conversation?.contextSummary;
-
-      final messagesStream = firestoreService.getMessages(conversationId);
-      final messagesList = await messagesStream.first;
-
-      final history = <Content>[];
+      final conversation     = await firestoreService.getConversation(conversationId);
+      final contextSummary   = conversation?.contextSummary;
+      final messagesList     = await firestoreService.getMessages(conversationId).first;
+      final history          = <Content>[];
 
       if (contextSummary != null && contextSummary.isNotEmpty) {
-        history.add(Content('user', [TextPart('Previous context: $contextSummary')]));
+        history.add(Content('user',  [TextPart('Previous context: $contextSummary')]));
         history.add(Content('model', [TextPart('I remember our previous conversation. How can I help you today?')]));
       }
 
@@ -97,7 +147,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           timestamp: msg.createdAt,
         ));
         history.add(msg.isUser
-            ? Content('user', [TextPart(msg.content)])
+            ? Content('user',  [TextPart(msg.content)])
             : Content('model', [TextPart(msg.content)]));
         if (msg.isUser) _userMessageCount++;
       }
@@ -107,54 +157,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _conversationCreated = true;
     } catch (e) {
       debugPrint('Failed to resume conversation: $e');
-      final geminiService = ref.read(geminiServiceProvider);
-      _chatSession = geminiService.startChat();
+      _chatSession = ref.read(geminiServiceProvider).startChat();
     }
     if (mounted) setState(() => _isLoadingHistory = false);
   }
 
   Future<void> _loadOrStartConversation() async {
-    if (_isPrivate) {
-      _startFreshChat();
-      return;
-    }
-
+    if (_isPrivate) { _startFreshChat(); return; }
     setState(() => _isLoadingHistory = true);
     try {
-      final firestoreService = ref.read(firestoreServiceProvider);
-      final conversationsStream = firestoreService.getConversations();
-      final conversations = await conversationsStream.first;
-
+      final conversations = await ref.read(firestoreServiceProvider).getConversations().first;
       if (conversations.isNotEmpty) {
         final latest = conversations.first;
-        final age = DateTime.now().difference(latest.updatedAt);
-        // Resume if the conversation is less than 24 hours old
-        if (age.inHours < 24) {
+        if (DateTime.now().difference(latest.updatedAt).inHours < 24) {
           if (mounted) setState(() => _isLoadingHistory = false);
           await _resumeConversation(latest.id);
           return;
         }
       }
-    } catch (e) {
-      debugPrint('Failed to load recent conversation: $e');
-    }
-
+    } catch (e) { debugPrint('Failed to load recent conversation: $e'); }
     if (mounted) setState(() => _isLoadingHistory = false);
     _startFreshChat();
   }
 
   void _startFreshChat() {
-    final geminiService = ref.read(geminiServiceProvider);
-    _chatSession = geminiService.startChat();
+    _chatSession = ref.read(geminiServiceProvider).startChat();
     final voiceName = ref.read(activeVoiceProvider).name;
     _messages.add(_ChatMessage(
-      text:
-          "Hey! I'm $voiceName, your virtual friend. You can talk to me about anything—casual stuff, feelings, or whatever is on your mind. How are you doing today?",
+      text: "Hey! I'm $voiceName, your virtual friend. You can talk to me about anything—casual stuff, feelings, or whatever is on your mind. How are you doing today?",
       isUser: false,
       timestamp: DateTime.now(),
     ));
     if (mounted) setState(() {});
   }
+
+  // ── selection mode ─────────────────────────────────────────────────────────
 
   void _toggleSelection(int index) {
     setState(() {
@@ -167,15 +204,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  void _exitSelectionMode() {
-    setState(() {
-      _isSelectionMode = false;
-      _selectedIndices.clear();
-    });
-  }
+  void _exitSelectionMode() => setState(() {
+    _isSelectionMode = false;
+    _selectedIndices.clear();
+  });
 
   Future<void> _deleteSelectedMessages() async {
-    final indices = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
+    final indices     = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
     final firestoreIds = <String>[];
 
     for (final i in indices) {
@@ -186,8 +221,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
 
     if (firestoreIds.isNotEmpty && !_isPrivate) {
-      final chatNotifier = ref.read(chatSessionProvider.notifier);
-      await chatNotifier.deleteMessages(firestoreIds);
+      await ref.read(chatSessionProvider.notifier).deleteMessages(firestoreIds);
     }
 
     setState(() {
@@ -199,49 +233,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  @override
-  void dispose() {
-    _messageController.removeListener(_messageInputListener);
-    _messageController.dispose();
-    _scrollController.dispose();
-    _typingController.dispose();
-    super.dispose();
-  }
+  // ── messaging ──────────────────────────────────────────────────────────────
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
     if (_chatSession == null) {
-      debugPrint('Chat session is null — reinitializing');
       try {
-        final geminiService = ref.read(geminiServiceProvider);
-        _chatSession = geminiService.startChat();
+        _chatSession = ref.read(geminiServiceProvider).startChat();
       } catch (e) {
-        debugPrint('Failed to init chat session: $e');
-        setState(() {
-          _messages.add(_ChatMessage(
-            text: 'Failed to initialize Gemini: ${e.toString()}',
-            isUser: false,
-            timestamp: DateTime.now(),
-            isError: true,
-          ));
-        });
+        setState(() => _messages.add(_ChatMessage(
+          text: 'Failed to initialize: ${e.toString()}',
+          isUser: false,
+          timestamp: DateTime.now(),
+          isError: true,
+        )));
         return;
       }
     }
 
     _userMessageCount++;
     setState(() {
-      _messages.add(_ChatMessage(
-        text: text,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(_ChatMessage(text: text, isUser: true, timestamp: DateTime.now()));
       _messageController.clear();
       _isTyping = true;
     });
-
     _scrollToBottom();
 
     final chatNotifier = ref.read(chatSessionProvider.notifier);
@@ -250,27 +267,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         title: text.length > 40 ? '${text.substring(0, 40)}...' : text,
       );
       _conversationCreated = true;
-      // Persist the initial greeting so it appears when resuming
       if (_messages.isNotEmpty && !_messages.first.isUser) {
-        chatNotifier.persistMessage(
-          role: 'assistant',
-          content: _messages.first.text,
-        );
+        chatNotifier.persistMessage(role: 'assistant', content: _messages.first.text);
       }
     }
-
-    if (!_isPrivate) {
-      chatNotifier.persistMessage(role: 'user', content: text);
-    }
+    if (!_isPrivate) chatNotifier.persistMessage(role: 'user', content: text);
 
     try {
-      int? aiMessageIndex;
-      final aiMessageTime = DateTime.now();
-      final responseStream = _chatSession!.sendMessageStream(
-        Content.text(text),
-      );
-
-      final responseBuffer = StringBuffer();
+      int?   aiMessageIndex;
+      final  aiMessageTime   = DateTime.now();
+      final  responseStream  = _chatSession!.sendMessageStream(Content.text(text));
+      final  responseBuffer  = StringBuffer();
 
       await for (final chunk in responseStream) {
         final chunkText = chunk.text;
@@ -280,11 +287,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             _isTyping = false;
             aiMessageIndex ??= _messages.length;
             if (aiMessageIndex == _messages.length) {
-              _messages.add(_ChatMessage(
-                text: chunkText,
-                isUser: false,
-                timestamp: aiMessageTime,
-              ));
+              _messages.add(_ChatMessage(text: chunkText, isUser: false, timestamp: aiMessageTime));
             } else if (aiMessageIndex! < _messages.length) {
               _messages[aiMessageIndex!] = _ChatMessage(
                 text: _messages[aiMessageIndex!].text + chunkText,
@@ -298,20 +301,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
 
       if (responseBuffer.isNotEmpty && !_isPrivate) {
-        chatNotifier.persistMessage(
-          role: 'assistant',
-          content: responseBuffer.toString(),
-        );
+        chatNotifier.persistMessage(role: 'assistant', content: responseBuffer.toString());
       }
 
-      // Context memory: summarize older messages when threshold is exceeded
-      // TODO: Move threshold to config; consider token counting instead of message counting
       const contextWindowSize = 20;
-      final totalMessages =
-          _messages.where((m) => !m.isError).length;
-      if (!_isPrivate &&
-          totalMessages > contextWindowSize &&
-          totalMessages % 10 == 0) {
+      final totalMessages = _messages.where((m) => !m.isError).length;
+      if (!_isPrivate && totalMessages > contextWindowSize && totalMessages % 10 == 0) {
         _summarizeContextInBackground();
       }
 
@@ -333,8 +328,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       setState(() {
         _isTyping = false;
         _messages.add(_ChatMessage(
-          text:
-              'Error: ${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled in your Firebase Console.',
+          text: 'Error: ${e.toString()}\n\nMake sure Firebase AI Logic (Gemini API) is enabled.',
           isUser: false,
           timestamp: DateTime.now(),
           isError: true,
@@ -342,18 +336,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       });
     }
 
-    setState(() {
-      _isTyping = false;
-    });
+    setState(() => _isTyping = false);
     _scrollToBottom();
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 80), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 280),
           curve: Curves.easeOut,
         );
       }
@@ -368,45 +360,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .take((_messages.length - 10).clamp(0, _messages.length))
           .map((m) => '${m.isUser ? "User" : ref.read(activeVoiceProvider).name}: ${m.text}')
           .join('\n');
-
       if (olderMessages.isEmpty) return;
 
-      final geminiService = ref.read(geminiServiceProvider);
-      final summary = await geminiService.summarizeForContext(olderMessages);
-
+      final summary = await ref.read(geminiServiceProvider).summarizeForContext(olderMessages);
       if (summary.isNotEmpty) {
-        final chatNotifier = ref.read(chatSessionProvider.notifier);
-        await chatNotifier.saveContextSummary(summary);
-        debugPrint('Context summary saved (${summary.length} chars)');
+        await ref.read(chatSessionProvider.notifier).saveContextSummary(summary);
       }
-    } catch (e) {
-      debugPrint('Context summarization failed: $e');
-    }
+    } catch (e) { debugPrint('Context summarization failed: $e'); }
   }
+
+  // ── journal ────────────────────────────────────────────────────────────────
 
   bool get _canSaveAsJournal => _userMessageCount >= 2;
 
   String _gatherMessagesAsText() {
-    final msgs = _messages
-        .where((m) => !m.isError)
-        .skip(1) // skip initial Amigo greeting
-        .toList();
+    final msgs  = _messages.where((m) => !m.isError).skip(1).toList();
     final limit = msgs.length > 30 ? msgs.length - 30 : 0;
-    final buffer = StringBuffer();
+    final buf   = StringBuffer();
     for (int i = limit; i < msgs.length; i++) {
-      final label = msgs[i].isUser ? 'User' : ref.read(activeVoiceProvider).name;
-      buffer.writeln('$label: ${msgs[i].text}');
+      buf.writeln('${msgs[i].isUser ? "User" : ref.read(activeVoiceProvider).name}: ${msgs[i].text}');
     }
-    return buffer.toString();
+    return buf.toString();
   }
 
   void _showSaveConfirmation() {
-    final userMsgCount =
-        _messages.where((m) => m.isUser && !m.isError).length;
-
+    final userMsgCount = _messages.where((m) => m.isUser && !m.isError).length;
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: _P.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -417,48 +398,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 36,
-                height: 4,
+                width: 36, height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
+                  color: _P.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(height: 20),
               if (_isSummarizing) ...[
                 const SizedBox(height: 12),
-                const CircularProgressIndicator(color: AppColors.primary),
+                const CircularProgressIndicator(color: _P.teal),
                 const SizedBox(height: 16),
                 Text(
                   '${ref.read(activeVoiceProvider).name} is writing up your conversation...',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: _P.textSecondary, fontSize: 14),
                 ),
                 const SizedBox(height: 12),
               ] else ...[
-                Icon(Icons.note_add_rounded,
-                    size: 32, color: AppColors.primary),
-                const SizedBox(height: 12),
-                Text(
-                  'Save this conversation as a journal entry?',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                Container(
+                  width: 52, height: 52,
+                  decoration: BoxDecoration(
+                    color: _P.tealLight,
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  child: const Icon(Icons.note_add_rounded, size: 26, color: _P.teal),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Save as journal entry?',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _P.textPrimary),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
-                  '$userMsgCount messages with ${ref.read(activeVoiceProvider).name}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textTertiary,
-                  ),
+                  '$userMsgCount messages · ${ref.read(activeVoiceProvider).name}',
+                  style: const TextStyle(fontSize: 13, color: _P.textSecondary),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -469,22 +445,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       await _summarizeAndNavigate();
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: _P.teal,
                       foregroundColor: Colors.white,
+                      elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('Save as Journal',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    child: const Text('Save as Journal', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                   ),
                 ),
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text('Cancel',
-                      style: TextStyle(color: AppColors.textSecondary)),
+                  child: const Text('Cancel', style: TextStyle(color: _P.textSecondary)),
                 ),
               ],
             ],
@@ -497,15 +470,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _summarizeAndNavigate() async {
     setState(() => _isSummarizing = true);
     try {
-      final geminiService = ref.read(geminiServiceProvider);
-      final transcript = _gatherMessagesAsText();
-      final result = await geminiService.summarizeConversation(transcript);
-
+      final result = await ref.read(geminiServiceProvider)
+          .summarizeConversation(_gatherMessagesAsText());
       if (mounted) {
-        setState(() {
-          _isSummarizing = false;
-          _savedAsJournal = true;
-        });
+        setState(() { _isSummarizing = false; _savedAsJournal = true; });
         Navigator.pushReplacementNamed(
           context,
           AppRoutes.journalEditor,
@@ -520,9 +488,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (mounted) {
         setState(() => _isSummarizing = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Could not summarize conversation'),
-            backgroundColor: AppColors.error,
+          const SnackBar(
+            content: Text('Could not summarize conversation'),
+            backgroundColor: _P.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -530,273 +498,153 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  // ── build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    const isDark = false;
     return Scaffold(
-      backgroundColor: _ChatPalette.background(isDark),
+      backgroundColor: _P.bg,
       body: SafeArea(
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.06),
-                AppColors.background,
-                AppColors.secondary.withValues(alpha: 0.03),
-              ],
-            ),
-          ),
-          child: Column(
-            children: [
-              if (_isSelectionMode)
-                _buildSelectionBar()
-              else
-                _buildAppBar(isDark),
-              Expanded(child: _buildMessagesList(isDark)),
-              if (_isTyping) _buildTypingIndicator(isDark),
-              if (!_isSelectionMode) _buildInputArea(isDark),
-            ],
-          ),
+        child: Column(
+          children: [
+            _isSelectionMode ? _buildSelectionBar() : _buildAppBar(),
+            Expanded(child: _buildMessagesList()),
+            if (_isTyping) _buildTypingIndicator(),
+            if (!_isSelectionMode) _buildInputArea(),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildSelectionBar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: const Color(0xFFE0DCD6), width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: _exitSelectionMode,
-            color: AppColors.textPrimary,
-            iconSize: 22,
-          ),
-          Text(
-            '${_selectedIndices.length} selected',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: _selectedIndices.isEmpty
-                ? null
-                : () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Delete Messages'),
-                        content: Text(
-                          'Delete ${_selectedIndices.length} message${_selectedIndices.length == 1 ? '' : 's'}? This cannot be undone.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.error,
-                            ),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed == true) await _deleteSelectedMessages();
-                  },
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: _selectedIndices.isEmpty
-                  ? AppColors.textTertiary
-                  : AppColors.error,
-            ),
-            label: Text(
-              'Delete',
-              style: TextStyle(
-                color: _selectedIndices.isEmpty
-                    ? AppColors.textTertiary
-                    : AppColors.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ── app bar ────────────────────────────────────────────────────────────────
 
-  Widget _buildAppBar(bool isDark) {
+  Widget _buildAppBar() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      decoration: BoxDecoration(
-        color: _ChatPalette.headerSurface(isDark),
-        border: Border(
-          bottom: BorderSide(color: _ChatPalette.border(isDark), width: 1),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      decoration: const BoxDecoration(
+        color: _P.surface,
+        border: Border(bottom: BorderSide(color: _P.border, width: 1)),
       ),
       child: Row(
         children: [
+          // Back arrow (journal mode only)
           if (widget.journalMode && Navigator.canPop(context)) ...[
             GestureDetector(
               onTap: () => Navigator.pop(context),
-              child: Icon(
-                Icons.arrow_back_rounded,
-                color: _ChatPalette.textPrimary(isDark),
-                size: 22,
-              ),
+              child: const Icon(Icons.arrow_back_rounded, color: _P.textPrimary, size: 22),
             ),
             const SizedBox(width: 10),
           ],
+
+          // Avatar
           Container(
-            width: 36,
-            height: 36,
+            width: 38, height: 38,
             decoration: BoxDecoration(
-              color: _ChatPalette.avatarBackground(isDark),
-              borderRadius: BorderRadius.circular(11),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_P.teal, _P.tealDark],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: const [BoxShadow(color: Color(0x261FB8A0), blurRadius: 8, offset: Offset(0, 3))],
             ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              color: _ChatPalette.accent,
-              size: 18,
-            ),
+            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 10),
+
+          // Name + online
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   ref.watch(activeVoiceProvider).name,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: _ChatPalette.textPrimary(isDark),
-                      ),
+                  style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700,
+                    color: _P.textPrimary, letterSpacing: -0.2,
+                  ),
                 ),
+                const SizedBox(height: 2),
                 Row(
                   children: [
                     Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: _ChatPalette.online,
-                        shape: BoxShape.circle,
-                      ),
+                      width: 6, height: 6,
+                      decoration: const BoxDecoration(color: _P.online, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      'Online',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: _ChatPalette.textSecondary(isDark),
-                          ),
-                    ),
+                    const Text('Online', style: TextStyle(fontSize: 11, color: _P.textSecondary)),
                   ],
                 ),
               ],
             ),
           ),
+
+          // Right actions
           if (widget.journalMode)
-            TextButton(
-              onPressed:
-                  _canSaveAsJournal && !_savedAsJournal && !_isSummarizing
-                      ? () => _showSaveConfirmation()
-                      : null,
-              style: TextButton.styleFrom(
-                backgroundColor: _canSaveAsJournal && !_savedAsJournal
-                    ? AppColors.primary
-                    : AppColors.surfaceVariant,
-                foregroundColor: _canSaveAsJournal && !_savedAsJournal
-                    ? Colors.white
-                    : _ChatPalette.textSecondary(isDark),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              child: Text(
-                _savedAsJournal ? 'Saved' : 'Done -- Save',
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600),
-              ),
+            _JournalSaveButton(
+              saved: _savedAsJournal,
+              canSave: _canSaveAsJournal && !_savedAsJournal && !_isSummarizing,
+              onTap: _showSaveConfirmation,
             )
           else ...[
+            // Private toggle
             GestureDetector(
               onTap: () {
-                final notifier = ref.read(chatSessionProvider.notifier);
-                notifier.togglePrivate();
+                ref.read(chatSessionProvider.notifier).togglePrivate();
                 setState(() {});
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: _isPrivate
-                      ? AppColors.accent.withValues(alpha: 0.12)
-                      : _ChatPalette.statusPillBackground(isDark),
+                  color: _isPrivate ? _P.tealLight : _P.surfaceAlt,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: _isPrivate
-                        ? AppColors.accent.withValues(alpha: 0.4)
-                        : _ChatPalette.border(isDark),
+                    color: _isPrivate ? _P.teal.withOpacity(0.4) : _P.border,
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _isPrivate
-                          ? Icons.lock_rounded
-                          : Icons.lock_open_rounded,
+                      _isPrivate ? Icons.lock_rounded : Icons.lock_open_rounded,
                       size: 13,
-                      color: _isPrivate
-                          ? AppColors.accent
-                          : _ChatPalette.textSecondary(isDark),
+                      color: _isPrivate ? _P.teal : _P.textSecondary,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       _isPrivate ? 'Private' : 'Saved',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: _isPrivate
-                                ? AppColors.accent
-                                : _ChatPalette.textSecondary(isDark),
-                            fontWeight: FontWeight.w600,
-                          ),
+                      style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w600,
+                        color: _isPrivate ? _P.teal : _P.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(width: 8),
+
+            // Journal save icon
             GestureDetector(
               onTap: _canSaveAsJournal && !_savedAsJournal && !_isSummarizing
-                  ? _showSaveConfirmation
-                  : null,
-              child: Icon(
-                _savedAsJournal
-                    ? Icons.check_circle_rounded
-                    : Icons.note_add_rounded,
-                size: 22,
-                color: _savedAsJournal
-                    ? AppColors.accent
-                    : _canSaveAsJournal
-                        ? _ChatPalette.textPrimary(isDark)
-                        : _ChatPalette.textHint(isDark),
+                  ? _showSaveConfirmation : null,
+              child: Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: _savedAsJournal
+                      ? _P.tealLight
+                      : _canSaveAsJournal ? _P.surfaceAlt : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _savedAsJournal ? Icons.check_circle_rounded : Icons.note_add_rounded,
+                  size: 20,
+                  color: _savedAsJournal
+                      ? _P.teal
+                      : _canSaveAsJournal ? _P.textPrimary : _P.textHint,
+                ),
               ),
             ),
           ],
@@ -805,58 +653,107 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildMessagesList(bool isDark) {
+  // ── selection bar ──────────────────────────────────────────────────────────
+
+  Widget _buildSelectionBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 8, 8, 8),
+      decoration: const BoxDecoration(
+        color: _P.surface,
+        border: Border(bottom: BorderSide(color: _P.border, width: 1)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: _exitSelectionMode,
+            color: _P.textPrimary,
+            iconSize: 22,
+          ),
+          Text(
+            '${_selectedIndices.length} selected',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _P.textPrimary),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _selectedIndices.isEmpty ? null : () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: _P.surface,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: const Text('Delete Messages'),
+                  content: Text(
+                    'Delete ${_selectedIndices.length} message${_selectedIndices.length == 1 ? '' : 's'}? This cannot be undone.',
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(backgroundColor: _P.error, foregroundColor: Colors.white),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) await _deleteSelectedMessages();
+            },
+            icon: Icon(Icons.delete_outline_rounded, size: 20,
+                color: _selectedIndices.isEmpty ? _P.textHint : _P.error),
+            label: Text('Delete',
+                style: TextStyle(
+                  color: _selectedIndices.isEmpty ? _P.textHint : _P.error,
+                  fontWeight: FontWeight.w600,
+                )),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── messages list ──────────────────────────────────────────────────────────
+
+  Widget _buildMessagesList() {
     if (_isLoadingHistory) {
       return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppColors.primary),
-            SizedBox(height: 12),
-            Text(
-              'Loading conversation...',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
+            CircularProgressIndicator(color: _P.teal, strokeWidth: 2.5),
+            SizedBox(height: 14),
+            Text('Loading conversation…', style: TextStyle(color: _P.textSecondary, fontSize: 14)),
           ],
         ),
       );
     }
+
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       itemCount: _messages.length,
       itemBuilder: (context, index) {
-        final message = _messages[index];
-        final showAvatar =
-            index == 0 || _messages[index - 1].isUser != message.isUser;
+        final message    = _messages[index];
+        final showAvatar = index == 0 || _messages[index - 1].isUser != message.isUser;
         final isSelected = _selectedIndices.contains(index);
 
         return GestureDetector(
           onLongPress: () {
-            if (!_isSelectionMode) {
-              setState(() => _isSelectionMode = true);
-            }
+            if (!_isSelectionMode) setState(() => _isSelectionMode = true);
             _toggleSelection(index);
           },
           onTap: _isSelectionMode ? () => _toggleSelection(index) : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            color: isSelected
-                ? AppColors.primary.withValues(alpha: 0.08)
-                : Colors.transparent,
+            color: isSelected ? _P.tealLight : Colors.transparent,
             child: Row(
               children: [
                 if (_isSelectionMode)
                   Padding(
-                    padding: const EdgeInsets.only(left: 4),
+                    padding: const EdgeInsets.only(left: 2, right: 4),
                     child: Icon(
-                      isSelected
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
+                      isSelected ? Icons.check_circle_rounded : Icons.circle_outlined,
                       size: 20,
-                      color: isSelected
-                          ? AppColors.primary
-                          : AppColors.textTertiary,
+                      color: isSelected ? _P.teal : _P.textHint,
                     ),
                   ),
                 Expanded(
@@ -866,7 +763,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     child: _MessageBubble(
                       message: message,
                       showAvatar: showAvatar,
-                      isDark: isDark,
+                      voiceName: ref.read(activeVoiceProvider).name,
                     ),
                   ),
                 ),
@@ -878,52 +775,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildTypingIndicator(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+  // ── typing indicator ───────────────────────────────────────────────────────
+
+  Widget _buildTypingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Row(
         children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              color: _ChatPalette.avatarBackground(isDark),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              color: _ChatPalette.accent,
-              size: 14,
-            ),
-          ),
+          _AiAvatar(size: 28),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: _ChatPalette.assistantBubbleBackground(isDark),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _ChatPalette.border(isDark)),
+              color: _P.surface,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(4),
+                bottomRight: Radius.circular(16),
+              ),
+              border: Border.all(color: _P.border),
+              boxShadow: const [BoxShadow(color: _P.shadow, blurRadius: 6, offset: Offset(0, 2))],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _TypingDot(
-                  controller: _typingController,
-                  delay: 0.0,
-                  color: _ChatPalette.accent,
-                ),
-                const SizedBox(width: 4),
-                _TypingDot(
-                  controller: _typingController,
-                  delay: 0.2,
-                  color: _ChatPalette.accent,
-                ),
-                const SizedBox(width: 4),
-                _TypingDot(
-                  controller: _typingController,
-                  delay: 0.4,
-                  color: _ChatPalette.accent,
-                ),
+                _TypingDot(controller: _typingController, delay: 0.0),
+                const SizedBox(width: 5),
+                _TypingDot(controller: _typingController, delay: 0.2),
+                const SizedBox(width: 5),
+                _TypingDot(controller: _typingController, delay: 0.4),
               ],
             ),
           ),
@@ -932,98 +813,98 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  Widget _buildInputArea(bool isDark) {
+  // ── input area ─────────────────────────────────────────────────────────────
+
+  Widget _buildInputArea() {
+    const pillRadius = BorderRadius.all(Radius.circular(26));
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-      decoration: BoxDecoration(
-        color: _ChatPalette.composerSurface(isDark),
-        border: Border(
-          top: BorderSide(color: _ChatPalette.border(isDark), width: 1),
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+      // Explicit white container — never inherits dark scaffold color
+      color: _P.surface,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // ── Text field ──
           Expanded(
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               decoration: BoxDecoration(
-                color: _ChatPalette.inputBackground(isDark),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: _isInputFocused
-                      ? _ChatPalette.accent
-                      : _ChatPalette.border(isDark),
-                  width: _isInputFocused ? 1.5 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                borderRadius: pillRadius,
+                boxShadow: _isInputFocused
+                    ? [const BoxShadow(color: Color(0x281FB8A0), blurRadius: 12, offset: Offset(0, 3))]
+                    : [const BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))],
               ),
-              child: TextField(
-                controller: _messageController,
-                minLines: 1,
-                maxLines: 5,
-                onTap: () {
-                  if (!_isInputFocused && mounted) {
-                    setState(() => _isInputFocused = true);
-                  }
-                },
-                onTapOutside: (_) {
-                  if (_isInputFocused && mounted) {
-                    setState(() => _isInputFocused = false);
-                  }
-                  FocusScope.of(context).unfocus();
-                },
-                decoration: InputDecoration(
-                  hintText: 'Type your message...',
-                  hintStyle: TextStyle(color: _ChatPalette.textHint(isDark)),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+              // Theme override: force Brightness.light so that the dark app
+              // theme never bleeds fillColor or text color into this widget.
+              child: Theme(
+                data: ThemeData(
+                  brightness: Brightness.light,
+                  colorScheme: const ColorScheme.light(
+                    primary: _P.teal,
+                    onSurface: _P.textPrimary,
+                  ),
+                  inputDecorationTheme: const InputDecorationTheme(
+                    filled: true,
+                    fillColor: _P.inputBg,
+                    hintStyle: TextStyle(color: _P.textHint, fontSize: 15),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                    border: OutlineInputBorder(
+                      borderRadius: pillRadius,
+                      borderSide: BorderSide(color: _P.border, width: 1),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: pillRadius,
+                      borderSide: BorderSide(color: _P.border, width: 1),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: pillRadius,
+                      borderSide: BorderSide(color: _P.borderFocus, width: 1.5),
+                    ),
                   ),
                 ),
-                textInputAction: TextInputAction.send,
-                style: TextStyle(
-                  color: _ChatPalette.textPrimary(isDark),
-                  height: 1.35,
+                child: TextField(
+                  controller: _messageController,
+                  focusNode: _inputFocusNode,
+                  minLines: 1,
+                  maxLines: 5,
+                  // Always dark text on white — never depends on theme brightness
+                  style: const TextStyle(
+                    color: _P.textPrimary,
+                    fontSize: 15,
+                    height: 1.45,
+                  ),
+                  cursorColor: _P.teal,
+                  decoration: const InputDecoration(hintText: 'Message…'),
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
                 ),
-                onChanged: (_) {
-                  if (mounted) setState(() {});
-                },
-                onSubmitted: (_) => _sendMessage(),
               ),
             ),
           ),
           const SizedBox(width: 8),
+
+// ── Send / Mic button ──
           AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
+            width: 44, height: 44,
             decoration: BoxDecoration(
-              color: _canSend
-                  ? _ChatPalette.accent
-                  : _ChatPalette.sendDisabled(isDark),
+              gradient: _canSend
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [_P.teal, _P.tealDark],
+                    )
+                  : null,
+              color: _canSend ? null : _P.surfaceAlt,
               borderRadius: BorderRadius.circular(22),
-              boxShadow: _canSend
-                  ? [
-                      BoxShadow(
-                        color: _ChatPalette.accent.withValues(alpha: 0.25),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : const [],
               border: Border.all(
-                color: _canSend
-                    ? _ChatPalette.accent
-                    : _ChatPalette.border(isDark),
+                color: _canSend ? _P.teal : _P.border,
               ),
+              boxShadow: _canSend
+                  ? [const BoxShadow(color: Color(0x301FB8A0), blurRadius: 10, offset: Offset(0, 4))]
+                  : [],
             ),
             child: Material(
               color: Colors.transparent,
@@ -1032,16 +913,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     ? _sendMessage
                     : () => Navigator.of(context).pushNamed(
                           AppRoutes.voiceChat,
-                          arguments: widget.journalMode
-                              ? {'journalMode': true}
-                              : null,
+                          arguments: widget.journalMode ? {'journalMode': true} : null,
                         ),
                 borderRadius: BorderRadius.circular(22),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
+                child: Center(
                   child: Icon(
-                    _canSend ? Icons.send_rounded : Icons.mic_rounded,
-                    color: _canSend ? Colors.white : _ChatPalette.textSecondary(isDark),
+                    _canSend ? Icons.arrow_upward_rounded : Icons.mic_rounded,
+                    color: _canSend ? Colors.white : _P.textSecondary,
                     size: 20,
                   ),
                 ),
@@ -1054,243 +932,295 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 }
 
-class _ChatMessage {
-  final String? firestoreId;
-  final String text;
-  final bool isUser;
-  final DateTime timestamp;
-  final bool isError;
+// ─── Reusable AI avatar ────────────────────────────────────────────────────────
 
-  _ChatMessage({
+class _AiAvatar extends StatelessWidget {
+  final double size;
+  const _AiAvatar({this.size = 32});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_P.teal, _P.tealDark],
+        ),
+        borderRadius: BorderRadius.circular(size * 0.3),
+        boxShadow: const [BoxShadow(color: Color(0x201FB8A0), blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: size * 0.46),
+    );
+  }
+}
+
+// ─── Journal save button ───────────────────────────────────────────────────────
+
+class _JournalSaveButton extends StatelessWidget {
+  final bool saved;
+  final bool canSave;
+  final VoidCallback onTap;
+  const _JournalSaveButton({required this.saved, required this.canSave, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: canSave ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          gradient: canSave && !saved
+              ? const LinearGradient(colors: [_P.teal, _P.tealDark])
+              : null,
+          color: saved ? _P.tealLight : canSave ? null : _P.surfaceAlt,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: saved ? _P.teal : canSave ? Colors.transparent : _P.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              saved ? Icons.check_rounded : Icons.save_rounded,
+              size: 14,
+              color: saved ? _P.teal : canSave ? Colors.white : _P.textHint,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              saved ? 'Saved' : 'Save',
+              style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w700,
+                color: saved ? _P.teal : canSave ? Colors.white : _P.textHint,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Message bubble ────────────────────────────────────────────────────────────
+
+class _MessageBubble extends StatelessWidget {
+  final _ChatMessage message;
+  final bool showAvatar;
+  final String voiceName;
+
+  const _MessageBubble({
+    required this.message,
+    required this.showAvatar,
+    required this.voiceName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isUser = message.isUser;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: 6,
+        left:  isUser ? 52 : 0,
+        right: isUser ? 0  : 52,
+      ),
+      child: Row(
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // AI avatar
+          if (!isUser)
+            showAvatar
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 8, bottom: 2),
+                    child: _AiAvatar(size: 28),
+                  )
+                : const SizedBox(width: 36),
+
+          // Bubble
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: isUser
+                      ? const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [_P.teal, _P.tealDark],
+                        )
+                      : null,
+                  color: isUser ? null : message.isError ? _P.errorBg : _P.surface,
+                  borderRadius: BorderRadius.only(
+                    topLeft:     const Radius.circular(16),
+                    topRight:    const Radius.circular(16),
+                    bottomLeft:  Radius.circular(isUser ? 16 : 4),
+                    bottomRight: Radius.circular(isUser ? 4  : 16),
+                  ),
+                  border: Border.all(
+                    color: isUser
+                        ? _P.teal.withOpacity(0.3)
+                        : message.isError
+                            ? _P.error.withOpacity(0.25)
+                            : _P.border,
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isUser
+                          ? const Color(0x201FB8A0)
+                          : const Color(0x08000000),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Sender label for AI
+                    if (!isUser && showAvatar) ...[
+                      Text(
+                        voiceName,
+                        style: const TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w700,
+                          color: _P.teal, letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    Text(
+                      message.text,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        color: isUser
+                            ? Colors.white
+                            : message.isError ? _P.error : _P.textPrimary,
+                        height: 1.5,
+                        fontWeight: isUser ? FontWeight.w500 : FontWeight.normal,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatTime(message.timestamp),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isUser
+                            ? Colors.white.withOpacity(0.65)
+                            : _P.textHint,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // User avatar
+          if (isUser)
+            showAvatar
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 2),
+                    child: Container(
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF4ECDC4), Color(0xFF1FB8A0)],
+                        ),
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: const [BoxShadow(color: Color(0x201FB8A0), blurRadius: 6, offset: Offset(0, 2))],
+                      ),
+                      child: const Icon(Icons.person_rounded, color: Colors.white, size: 14),
+                    ),
+                  )
+                : const SizedBox(width: 36),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime time) =>
+      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+}
+
+// ─── Typing dot ────────────────────────────────────────────────────────────────
+
+class _TypingDot extends StatelessWidget {
+  final AnimationController controller;
+  final double delay;
+
+  const _TypingDot({required this.controller, required this.delay});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final v = ((controller.value + delay) % 1.0);
+        final opacity = 0.25 + 0.75 * (v < 0.5 ? v * 2 : (1 - v) * 2);
+        final scale   = 0.85 + 0.15 * (v < 0.5 ? v * 2 : (1 - v) * 2);
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 7, height: 7,
+            decoration: BoxDecoration(
+              color: _P.teal.withOpacity(opacity),
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Animated message entry ────────────────────────────────────────────────────
+
+class _AnimatedMessageEntry extends StatelessWidget {
+  final Widget child;
+  final bool isUser;
+
+  const _AnimatedMessageEntry({super.key, required this.child, required this.isUser});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(
+          offset: Offset(
+            (1 - v) * (isUser ? 14.0 : -14.0),
+            (1 - v) * 6.0,
+          ),
+          child: child,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+// ─── Data model ───────────────────────────────────────────────────────────────
+
+class _ChatMessage {
+  final String?   firestoreId;
+  final String    text;
+  final bool      isUser;
+  final DateTime  timestamp;
+  final bool      isError;
+
+  const _ChatMessage({
     this.firestoreId,
     required this.text,
     required this.isUser,
     required this.timestamp,
     this.isError = false,
   });
-}
-
-class _MessageBubble extends StatelessWidget {
-  final _ChatMessage message;
-  final bool showAvatar;
-  final bool isDark;
-
-  const _MessageBubble({
-    required this.message,
-    required this.showAvatar,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: 8,
-        left: message.isUser ? 48 : 0,
-        right: message.isUser ? 0 : 48,
-      ),
-      child: Row(
-        mainAxisAlignment:
-            message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!message.isUser && showAvatar)
-            Container(
-              width: 28,
-              height: 28,
-              margin: const EdgeInsets.only(right: 7),
-              decoration: BoxDecoration(
-                color: _ChatPalette.avatarBackground(isDark),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                color: _ChatPalette.accent,
-                size: 14,
-              ),
-            )
-          else if (!message.isUser)
-            const SizedBox(width: 35),
-          Flexible(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 410),
-              child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-              decoration: BoxDecoration(
-                color: message.isUser
-                    ? _ChatPalette.userBubbleBackground
-                    : message.isError
-                        ? _ChatPalette.errorBubbleBackground(isDark)
-                        : _ChatPalette.assistantBubbleBackground(isDark),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(message.isUser ? 16 : 5),
-                  bottomRight: Radius.circular(message.isUser ? 5 : 16),
-                ),
-                border: Border.all(
-                  color: message.isUser
-                      ? _ChatPalette.userBubbleBackground
-                      : message.isError
-                          ? _ChatPalette.errorBorder
-                          : _ChatPalette.border(isDark),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message.text,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: message.isUser
-                          ? Colors.white
-                          : message.isError
-                              ? AppColors.error
-                              : _ChatPalette.textPrimary(isDark),
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatTime(message.timestamp),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: message.isUser
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : _ChatPalette.textSecondary(isDark),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ),
-          ),
-          if (message.isUser && showAvatar)
-            Container(
-              width: 28,
-              height: 28,
-              margin: const EdgeInsets.only(left: 7),
-              decoration: BoxDecoration(
-                color: _ChatPalette.userAvatarBackground,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: const Icon(
-                Icons.person_rounded,
-                color: Colors.white,
-                size: 14,
-              ),
-            )
-          else if (message.isUser)
-            const SizedBox(width: 35),
-        ],
-      ),
-    );
-  }
-
-  String _formatTime(DateTime time) {
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
-}
-
-class _TypingDot extends StatelessWidget {
-  final AnimationController controller;
-  final double delay;
-  final Color color;
-
-  const _TypingDot({
-    required this.controller,
-    required this.delay,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        final value = ((controller.value + delay) % 1.0);
-        final opacity =
-            0.3 + (0.7 * (value < 0.5 ? value * 2 : (1 - value) * 2));
-
-        return Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: opacity),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AnimatedMessageEntry extends StatelessWidget {
-  final Widget child;
-  final bool isUser;
-
-  const _AnimatedMessageEntry({
-    super.key,
-    required this.child,
-    required this.isUser,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        final offsetY = (1 - value) * 0.045;
-        final offsetX = (1 - value) * (isUser ? 0.02 : -0.02);
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(offsetX * 100, offsetY * 100),
-            child: child,
-          ),
-        );
-      },
-      child: child,
-    );
-  }
-}
-
-class _ChatPalette {
-  static const Color accent = AppColors.primary;
-  static const Color online = AppColors.success;
-  static const Color userBubbleBackground = AppColors.primary;
-  static const Color userAvatarBackground = AppColors.primaryDark;
-  static const Color errorBorder = Color(0xFFFCA5A5);
-
-  static Color background(bool isDark) =>
-      isDark ? AppColors.darkBackground : AppColors.background;
-  static Color headerSurface(bool isDark) =>
-      isDark ? AppColors.darkSurface : AppColors.surface;
-  static Color composerSurface(bool isDark) =>
-      isDark ? AppColors.darkSurface : AppColors.surface;
-  static Color inputBackground(bool isDark) =>
-      isDark ? AppColors.darkSurfaceVariant : Colors.white;
-  static Color assistantBubbleBackground(bool isDark) =>
-      isDark ? AppColors.darkSurfaceVariant : AppColors.surface;
-  static Color errorBubbleBackground(bool isDark) =>
-      isDark ? const Color(0xFF3A2520) : const Color(0xFFFEF0EE);
-  static Color avatarBackground(bool isDark) =>
-      isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
-  static Color statusPillBackground(bool isDark) =>
-      isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
-  static Color border(bool isDark) =>
-      isDark ? const Color(0xFF4A4540) : const Color(0xFFE0DCD6);
-  static Color sendDisabled(bool isDark) =>
-      isDark ? const Color(0xFF4A4540) : AppColors.surfaceVariant;
-  static Color textPrimary(bool isDark) =>
-      isDark ? const Color(0xFFEDE8E4) : AppColors.textPrimary;
-  static Color textSecondary(bool isDark) =>
-      isDark ? AppColors.textTertiary : AppColors.textSecondary;
-  static Color textHint(bool isDark) =>
-      isDark ? AppColors.textTertiary : AppColors.textSecondary;
 }

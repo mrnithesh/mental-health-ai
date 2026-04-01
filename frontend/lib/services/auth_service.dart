@@ -46,25 +46,30 @@ class AuthService {
 
   /// Sign in with Google
   Future<UserCredential> signInWithGoogle() async {
-    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-    
-    if (googleUser == null) {
-      throw AuthException(
-        code: 'sign_in_cancelled',
-        message: 'Google sign in was cancelled',
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+
+      if (googleUser == null) {
+        throw AuthException(
+          code: 'sign_in_cancelled',
+          message: 'Google sign in was cancelled',
+        );
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      await _createOrUpdateUserDocument(userCredential.user!);
+      return userCredential;
+    } catch (e) {
+      print('Firebase OAuth Login Error: $e');
+      rethrow;
     }
-
-    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    final userCredential = await _auth.signInWithCredential(credential);
-    await _createOrUpdateUserDocument(userCredential.user!);
-    return userCredential;
   }
 
   /// Send OTP to phone number

@@ -56,6 +56,9 @@ class VoicePreferenceNotifier extends StateNotifier<String> {
   }
 }
 
+/// Indicates if a live voice chat session is currently active
+final voiceSessionActiveProvider = StateProvider<bool>((ref) => false);
+
 /// Convenience provider to get the active AmigoVoice object
 final activeVoiceProvider = Provider<AmigoVoice>((ref) {
   final voiceId = ref.watch(voicePreferenceProvider);

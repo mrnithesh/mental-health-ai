@@ -20,6 +20,10 @@ class AppColors {
   static const Color surface = Color(0xFFFFFFFF);
   static const Color surfaceVariant = Color(0xFFF0ECE6);
 
+  // Glassmorphism gradients
+  static const Color gradientStart = Color(0xFFC9D6FF);
+  static const Color gradientEnd = Color(0xFFE2E2E2);
+
   // Text — warm charcoal
   static const Color textPrimary = Color(0xFF2D2520);
   static const Color textSecondary = Color(0xFF6B6560);
@@ -57,58 +61,88 @@ class AppSpacing {
   static const double md = 16;
   static const double lg = 24;
   static const double xl = 32;
+  // Glassmorphism spacing
+  static const double screenPadding = 24;
+  static const double component = 16;
+  static const double grid = 12;
+}
+
+class AppGlass {
+  static BoxDecoration get container => BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 1,
+          ),
+        ],
+      );
+}
+
+class AppGradients {
+  static LinearGradient get background => LinearGradient(
+        colors: [AppColors.gradientStart, AppColors.gradientEnd],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
 }
 
 class AppTheme {
-  static const _fontFamily = 'default';
+  static const _fontFamily = 'Inter'; // Modern font for glassmorphism
 
   static TextTheme get _textTheme => const TextTheme(
         headlineLarge: TextStyle(
-          fontSize: 28,
+          fontSize: 26, // Updated for title
           fontWeight: FontWeight.bold,
           letterSpacing: -0.5,
         ),
         headlineMedium: TextStyle(
-          fontSize: 24,
+          fontSize: 22, // Adjusted
           fontWeight: FontWeight.bold,
           letterSpacing: -0.3,
         ),
         titleLarge: TextStyle(
-          fontSize: 20,
+          fontSize: 20, // Updated for header
           fontWeight: FontWeight.w600,
         ),
         titleMedium: TextStyle(
-          fontSize: 16,
+          fontSize: 18, // Adjusted
           fontWeight: FontWeight.w600,
         ),
         titleSmall: TextStyle(
-          fontSize: 14,
+          fontSize: 16, // Adjusted
           fontWeight: FontWeight.w600,
         ),
         bodyLarge: TextStyle(
-          fontSize: 15,
+          fontSize: 16, // Adjusted
           fontWeight: FontWeight.normal,
           height: 1.5,
         ),
         bodyMedium: TextStyle(
-          fontSize: 14,
+          fontSize: 16, // Updated for chat
           fontWeight: FontWeight.normal,
           height: 1.4,
         ),
         bodySmall: TextStyle(
-          fontSize: 12,
+          fontSize: 13, // Updated for small
           fontWeight: FontWeight.normal,
         ),
         labelLarge: TextStyle(
-          fontSize: 14,
+          fontSize: 15, // Updated for button
           fontWeight: FontWeight.w600,
         ),
         labelMedium: TextStyle(
-          fontSize: 12,
+          fontSize: 14, // Adjusted
           fontWeight: FontWeight.w500,
         ),
         labelSmall: TextStyle(
-          fontSize: 11,
+          fontSize: 12, // Adjusted
           fontWeight: FontWeight.w500,
         ),
       );
