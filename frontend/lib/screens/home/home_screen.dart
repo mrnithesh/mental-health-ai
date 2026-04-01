@@ -566,7 +566,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final today = DateTime.now().weekday;
     final todayActive = _weekActivity[today - 1];
 
-    return GlassCard(
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, AppRoutes.moodHistory),
+      child: GlassCard(
       padding: const EdgeInsets.all(20),
       backgroundColor: AppColors.primary.withValues(alpha: 0.05),
       border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
@@ -659,6 +661,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

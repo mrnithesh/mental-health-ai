@@ -409,14 +409,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ),
               const SizedBox(height: 20),
               if (_isSummarizing) ...[
-                const SizedBox(height: 12),
-                const CircularProgressIndicator(color: _P.teal),
-                const SizedBox(height: 16),
-                Text(
-                  '${ref.read(activeVoiceProvider).name} is writing up your conversation...',
-                  style: const TextStyle(color: _P.textSecondary, fontSize: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 28),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 20, height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: _P.teal,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '${ref.read(activeVoiceProvider).name} is writing it up...',
+                        style: const TextStyle(color: _P.textSecondary, fontSize: 14),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
               ] else ...[
                 Container(
                   width: 52, height: 52,
@@ -444,8 +456,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     onPressed: () async {
                       setState(() => _isSummarizing = true);
                       setSheetState(() {});
-                      Navigator.pop(ctx);
-                      await _summarizeAndNavigate();
+
+                      try {
+                        final result = await ref.read(geminiServiceProvider)
+                            .summarizeConversation(_gatherMessagesAsText());
+                        if (!mounted) return;
+                        setState(() { _isSummarizing = false; _savedAsJournal = true; });
+                        Navigator.pop(ctx);
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.journalEditor,
+                          arguments: JournalEditorArgs(
+                            prefillTitle: result.title,
+                            prefillContent: result.body,
+                            prefillTags: ['chat-journal'],
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        setState(() => _isSummarizing = false);
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Could not summarize conversation'),
+                            backgroundColor: AppColors.error,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _P.teal,
@@ -468,37 +506,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _summarizeAndNavigate() async {
-    setState(() => _isSummarizing = true);
-    try {
-      final result = await ref.read(geminiServiceProvider)
-          .summarizeConversation(_gatherMessagesAsText());
-      if (mounted) {
-        setState(() { _isSummarizing = false; _savedAsJournal = true; });
-        Navigator.pushReplacementNamed(
-          context,
-          AppRoutes.journalEditor,
-          arguments: JournalEditorArgs(
-            prefillTitle: result.title,
-            prefillContent: result.body,
-            prefillTags: ['chat-journal'],
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSummarizing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not summarize conversation'),
-            backgroundColor: _P.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
   }
 
   // ── build ──────────────────────────────────────────────────────────────────
