@@ -50,7 +50,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
       },
       data: (_) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.voiceSetup);
+        Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
       },
     );
   }

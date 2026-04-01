@@ -371,7 +371,7 @@ class _VoicePage extends StatelessWidget {
   }
 }
 
-class _ReadyPage extends StatelessWidget {
+class _ReadyPage extends StatefulWidget {
   final String nickname;
   final String voiceName;
   final VoidCallback onFinish;
@@ -383,9 +383,36 @@ class _ReadyPage extends StatelessWidget {
   });
 
   @override
+  State<_ReadyPage> createState() => _ReadyPageState();
+}
+
+class _ReadyPageState extends State<_ReadyPage> {
+  bool _agreedToTerms = false;
+
+  void _showTerms() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        builder: (ctx, scrollController) => _TermsContent(
+          scrollController: scrollController,
+          onClose: () => Navigator.pop(ctx),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
-    final displayName = nickname.isNotEmpty ? nickname : 'Friend';
+    final displayName = widget.nickname.isNotEmpty ? widget.nickname : 'Friend';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
@@ -427,30 +454,157 @@ class _ReadyPage extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _SummaryRow(
-                    label: 'Your name', value: displayName),
+                _SummaryRow(label: 'Your name', value: displayName),
                 const SizedBox(height: 12),
-                _SummaryRow(
-                    label: 'Your Amigo', value: voiceName),
+                _SummaryRow(label: 'Your Amigo', value: widget.voiceName),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            'You can change these anytime in Settings',
-            style: tt.bodySmall?.copyWith(color: AppColors.textTertiary),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 22, height: 22,
+                  child: Checkbox(
+                    value: _agreedToTerms,
+                    onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
+                    activeColor: AppColors.primary,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showTerms,
+                    child: Text.rich(
+                      TextSpan(
+                        text: 'I agree to the ',
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        children: [
+                          TextSpan(
+                            text: 'Terms & Conditions',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: onFinish,
+              onPressed: _agreedToTerms ? widget.onFinish : null,
               style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16)),
               child: const Text('Let\'s Go!'),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TermsContent extends StatelessWidget {
+  final ScrollController scrollController;
+  final VoidCallback onClose;
+
+  const _TermsContent({required this.scrollController, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      child: Column(
+        children: [
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Terms & Conditions',
+              style: tt.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView(
+              controller: scrollController,
+              children: const [
+                _TermsSection(
+                  title: 'Prototype Disclaimer',
+                  body: 'Amigo is a prototype AI companion application developed for research and personal wellness exploration. It is NOT a finished commercial product and may contain bugs, errors, or unexpected behaviors.',
+                ),
+                _TermsSection(
+                  title: 'Not a Medical Device',
+                  body: 'Amigo is NOT a medical device, diagnostic tool, or therapeutic service. It is not a substitute for professional medical advice, diagnosis, or treatment. Never disregard professional medical or mental health advice because of something Amigo has said.',
+                ),
+                _TermsSection(
+                  title: 'Not a Crisis Service',
+                  body: 'Amigo is not equipped to handle mental health crises. If you are experiencing a medical or mental health emergency, please contact your local emergency services, a crisis helpline, or a qualified mental health professional immediately.',
+                ),
+                _TermsSection(
+                  title: 'AI Limitations',
+                  body: 'Amigo uses AI language models that may occasionally produce inaccurate, inappropriate, or unhelpful responses. The AI does not truly understand emotions or have feelings. Its responses are generated based on patterns, not genuine empathy.',
+                ),
+                _TermsSection(
+                  title: 'Data & Privacy',
+                  body: 'Your conversations, journal entries, and mood data are stored in your personal Firebase account. We do not sell or share your personal data with third parties. Conversations are processed by Google\'s Gemini AI models for response generation.',
+                ),
+                _TermsSection(
+                  title: 'Use at Your Own Risk',
+                  body: 'By using Amigo, you acknowledge that this is a prototype and accept all associated risks. The developers are not liable for any outcomes resulting from use of this application.',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onClose,
+              child: const Text('I Understand'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TermsSection extends StatelessWidget {
+  final String title;
+  final String body;
+  const _TermsSection({required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(
+              fontSize: 15, fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary)),
+          const SizedBox(height: 6),
+          Text(body, style: TextStyle(
+              fontSize: 13, color: AppColors.textSecondary, height: 1.5)),
         ],
       ),
     );

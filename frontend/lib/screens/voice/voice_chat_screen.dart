@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
@@ -15,6 +16,7 @@ import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../utils/audio_output.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
+import '../main_shell.dart';
 
 enum VoiceState { idle, connecting, listening, speaking, error }
 
@@ -97,7 +99,18 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     _breatheController.dispose();
     _durationTimer?.cancel();
     _durationTimer = null;
-    _disconnect();
+    _recordSubscription?.cancel();
+    _recordSubscription = null;
+    // Fire-and-forget async cleanup; session/recorder close gracefully
+    final session = _session;
+    final recorder = _recorder;
+    _session = null;
+    _recorder = null;
+    Future.microtask(() async {
+      try { await recorder?.stop(); } catch (_) {}
+      try { recorder?.dispose(); } catch (_) {}
+      try { await session?.close(); } catch (_) {}
+    });
     _audioOutput.dispose();
     super.dispose();
   }
@@ -108,6 +121,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Future<void> _onMicTap() async {
+    HapticFeedback.mediumImpact();
     switch (_state) {
       case VoiceState.idle:
       case VoiceState.error:
@@ -161,6 +175,42 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       _session = await geminiService.connectLive();
       debugPrint('[VOICE] ✅ Connected to Gemini Live API');
 
+      // Inject text chat context: stored summary + recent raw messages
+      try {
+        final firestoreService = ref.read(firestoreServiceProvider);
+        final conversations = await firestoreService.getConversations().first;
+        if (conversations.isNotEmpty) {
+          final convo = conversations.first;
+          final parts = <String>[];
+
+          if (convo.contextSummary != null && convo.contextSummary!.isNotEmpty) {
+            parts.add('Summary of earlier conversations: ${convo.contextSummary}');
+          }
+
+          final messages = await firestoreService.getMessages(convo.id).first;
+          if (messages.isNotEmpty) {
+            final recent = messages.length > 10
+                ? messages.sublist(messages.length - 10) : messages;
+            final transcript = recent
+                .map((m) => '${m.isUser ? "User" : "AI"}: ${m.content}')
+                .join('\n');
+            parts.add('Recent messages:\n$transcript');
+          }
+
+          if (parts.isNotEmpty) {
+            final contextText = parts.join('\n\n');
+            debugPrint('[VOICE] Injecting context (${contextText.length} chars)');
+            await _session!.send(
+              input: Content.text(contextText),
+              turnComplete: true,
+            );
+            debugPrint('[VOICE] ✅ Context sent (fire-and-forget)');
+          }
+        }
+      } catch (e) {
+        debugPrint('[VOICE] Context injection skipped: $e');
+      }
+
       _durationTimer?.cancel();
       _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) { timer.cancel(); return; }
@@ -179,6 +229,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       await _startRecording();
 
       WakelockPlus.enable();
+      HapticFeedback.mediumImpact();
       debugPrint('[VOICE] ✅ Session ready - waiting for user input');
       setState(() {
         _state = VoiceState.listening;
@@ -394,6 +445,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   }
 
   Future<void> _disconnect() async {
+    HapticFeedback.heavyImpact();
     WakelockPlus.disable();
     debugPrint('[VOICE] ══════════════════════════════════════');
     debugPrint('[VOICE] 🛑 ENDING VOICE CHAT SESSION');
@@ -407,7 +459,6 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     _durationTimer?.cancel();
     _durationTimer = null;
 
-    try { await _audioOutput.stopStream(); } catch (_) {}
     try {
       if (_recorder != null) {
         await _recorder!.stop();
@@ -415,15 +466,23 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
         _recorder = null;
       }
     } catch (_) {}
-    // Closing the session also terminates the await-for receive loop
+    // Close session first so the receive loop stops before we end the audio stream
     try { await _session?.close(); } catch (_) {}
     _session = null;
+    // Small delay to let the receive loop finish processing
+    await Future.delayed(const Duration(milliseconds: 100));
+    try { await _audioOutput.stopStream(); } catch (_) {}
 
     // Reset transcription tracking
     _currentUserMessageIndex = null;
     _currentAIMessageIndex = null;
     _userUtteranceFinished = true;
     _aiUtteranceFinished = true;
+
+    // Summarize and persist voice session context in background
+    if (_transcript.isNotEmpty) {
+      _persistVoiceContextInBackground();
+    }
 
     if (mounted) {
       setState(() {
@@ -441,6 +500,37 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
         });
       }
     }
+  }
+
+  void _persistVoiceContextInBackground() {
+    final transcriptText = _gatherTranscriptAsText();
+    if (transcriptText.trim().isEmpty) return;
+
+    Future.microtask(() async {
+      try {
+        final geminiService = ref.read(geminiServiceProvider);
+        final firestoreService = ref.read(firestoreServiceProvider);
+
+        final summary = await geminiService.summarizeForContext(transcriptText);
+        if (summary.isEmpty) return;
+
+        // Append to the latest text conversation's context, or create one
+        final conversations = await firestoreService.getConversations().first;
+        if (conversations.isNotEmpty) {
+          final existing = conversations.first.contextSummary ?? '';
+          final combined = existing.isEmpty
+              ? 'Voice session: $summary'
+              : '$existing\nVoice session: $summary';
+          await firestoreService.updateConversationContextSummary(
+            conversations.first.id,
+            combined,
+          );
+          debugPrint('[VOICE] Context summary persisted (${summary.length} chars)');
+        }
+      } catch (e) {
+        debugPrint('[VOICE] Failed to persist voice context: $e');
+      }
+    });
   }
 
   void _showTimeWarning(String msg, {bool urgent = false}) {
@@ -711,45 +801,27 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
   Future<bool> _onWillPop() async {
     final isActive = _state == VoiceState.listening || _state == VoiceState.speaking;
-    
+
     if (isActive) {
       final shouldLeave = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            'Quit Voice chat with Amigo',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          content: Text(
-            'Are you sure you want to end the voice chat session?',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('End voice session?',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary)),
+          content: const Text('Are you sure you want to end the voice chat?',
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(
-                'NO',
-                style: TextStyle(color: AppColors.primary),
-              ),
+              child: Text('Stay', style: TextStyle(color: AppColors.primary)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(
-                'YES',
-                style: TextStyle(color: AppColors.error),
-              ),
+              child: Text('Leave', style: TextStyle(color: AppColors.error)),
             ),
           ],
         ),
@@ -757,12 +829,13 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
       if (shouldLeave) {
         await _disconnect();
-        return true;
+        if (mounted) _closeVoiceScreen();
       }
       return false;
     }
-    
-    return true;
+
+    _closeVoiceScreen();
+    return false;
   }
 
   @override
@@ -892,12 +965,32 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     );
   }
 
+  void _closeVoiceScreen() {
+    MainShellState.of(context)?.switchTab(0);
+  }
+
   Widget _buildHeader() {
+    final isIdle = _state == VoiceState.idle || _state == VoiceState.error;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          const SizedBox(width: 48),
+          // LEFT: Close button (only when idle / not in active session)
+          if (isIdle)
+            GestureDetector(
+              onTap: () => _closeVoiceScreen(),
+              child: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+              ),
+            )
+          else
+            const SizedBox(width: 40),
 
           Expanded(
             child: Column(
@@ -942,8 +1035,8 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
             ),
           ),
 
-          // RIGHT: Placeholder for alignment
-          const SizedBox(width: 48),
+          // RIGHT: balance
+          const SizedBox(width: 40),
         ],
       ),
     );

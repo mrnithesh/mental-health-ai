@@ -76,6 +76,16 @@ class SettingsScreen extends ConsumerWidget {
               ),
 
               const SizedBox(height: 32),
+              _SectionHeader(title: 'Legal'),
+              const SizedBox(height: 14),
+              _ActionTile(
+                icon: Icons.description_outlined,
+                title: 'Terms & Conditions',
+                subtitle: 'Prototype disclaimer and usage terms',
+                color: AppColors.textSecondary,
+                onTap: () => _showTerms(context),
+              ),
+              const SizedBox(height: 32),
               _SectionHeader(title: 'About'),
               const SizedBox(height: 14),
               _ActionTile(
@@ -85,6 +95,68 @@ class SettingsScreen extends ConsumerWidget {
                 color: AppColors.primary,
               ),
               const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTerms(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        builder: (ctx, scrollController) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            children: [
+              Container(
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Terms & Conditions',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  children: const [
+                    _TermsItem(title: 'Prototype Disclaimer',
+                        body: 'Amigo is a prototype AI companion application developed for research and personal wellness exploration. It is NOT a finished commercial product.'),
+                    _TermsItem(title: 'Not a Medical Device',
+                        body: 'Amigo is NOT a medical device, diagnostic tool, or therapeutic service. It is not a substitute for professional medical advice, diagnosis, or treatment.'),
+                    _TermsItem(title: 'Not a Crisis Service',
+                        body: 'Amigo is not equipped to handle mental health crises. If you are experiencing an emergency, contact your local emergency services or a crisis helpline immediately.'),
+                    _TermsItem(title: 'AI Limitations',
+                        body: 'Amigo uses AI models that may produce inaccurate or inappropriate responses. The AI does not truly understand emotions. Responses are generated based on patterns, not genuine empathy.'),
+                    _TermsItem(title: 'Data & Privacy',
+                        body: 'Your data is stored in your personal Firebase account. We do not sell or share personal data. Conversations are processed by Google\'s Gemini AI models.'),
+                    _TermsItem(title: 'Use at Your Own Risk',
+                        body: 'By using Amigo, you acknowledge this is a prototype and accept all associated risks. The developers are not liable for any outcomes from use of this application.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ),
             ],
           ),
         ),
@@ -428,6 +500,30 @@ class _ComingSoonTile extends StatelessWidget {
                 fontSize: 11, fontWeight: FontWeight.w600,
                 color: AppColors.textTertiary)),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TermsItem extends StatelessWidget {
+  final String title;
+  final String body;
+  const _TermsItem({required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(
+              fontSize: 15, fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary)),
+          const SizedBox(height: 6),
+          Text(body, style: const TextStyle(
+              fontSize: 13, color: AppColors.textSecondary, height: 1.5)),
         ],
       ),
     );

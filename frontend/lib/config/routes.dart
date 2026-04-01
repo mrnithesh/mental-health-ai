@@ -50,7 +50,7 @@ class AppRoutes {
         return _fadeSlideRoute(const OnboardingScreen());
 
       case main:
-        return MaterialPageRoute(builder: (_) => const MainShell());
+        return MaterialPageRoute(builder: (_) => MainShell(key: MainShell.globalKey));
 
       case settingsScreen:
         return _fadeSlideRoute(const SettingsScreen());

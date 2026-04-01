@@ -1,33 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:water_drop_nav_bar/water_drop_nav_bar.dart';
 
 import '../config/theme.dart';
-import '../providers/voice_provider.dart';
 import 'home/home_screen.dart';
 import 'chat/chat_screen.dart';
 import 'voice/voice_chat_screen.dart';
 import 'journal/journal_list_screen.dart';
 import 'settings/settings_screen.dart';
 
-class MainShell extends ConsumerStatefulWidget {
+class MainShell extends StatefulWidget {
+  static final globalKey = GlobalKey<MainShellState>();
+
   const MainShell({super.key});
 
   @override
   MainShellState createState() => MainShellState();
 }
 
-class MainShellState extends ConsumerState<MainShell> {
+class MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   late PageController _pageController;
 
-  // Maps: 0=Home, 1=Chat, 2=Voice, 3=Journal, 4=Settings
-  // WaterDropNavBar items: 0=Home, 1=Chat, 2=Journal, 3=Settings
-  // Voice (index 2 in pages) is accessed only via the FAB.
-
   static MainShellState? of(BuildContext context) =>
-      context.findAncestorStateOfType<MainShellState>();
+      context.findAncestorStateOfType<MainShellState>() ??
+      MainShell.globalKey.currentState;
 
   void switchTab(int screenIndex) {
     if (screenIndex < 0 || screenIndex > 4) return;
@@ -72,9 +69,8 @@ class MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final isVoiceScreen = _currentIndex == 2;
-    final voiceSessionActive = ref.watch(voiceSessionActiveProvider);
-    final hideNavBar = isVoiceScreen && voiceSessionActive;
-    final hideVoiceFab = _currentIndex == 1 || hideNavBar;
+    final hideNavBar = isVoiceScreen;
+    final hideVoiceFab = _currentIndex == 1 || isVoiceScreen;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(

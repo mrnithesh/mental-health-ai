@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../config/routes.dart';
@@ -10,6 +11,7 @@ import '../../providers/chat_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
+import '../main_shell.dart';
 
 class _P {
   static const bg         = AppColors.background;
@@ -24,13 +26,9 @@ class _P {
   static const tealLight  = AppColors.surfaceVariant;
   static const tealDark   = AppColors.primaryDark;
 
-  static const userBubble    = AppColors.primary;
-  static const userBubbleDark= AppColors.primaryDark;
-
   static const textPrimary   = AppColors.textPrimary;
   static const textSecondary = AppColors.textSecondary;
   static const textHint      = AppColors.textTertiary;
-  static const textOnTeal    = Color(0xFFFFFFFF);
 
   static const error      = AppColors.error;
   static const errorBg    = Color(0xFFFEF2F2);
@@ -153,6 +151,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _chatSession = ref.read(geminiServiceProvider).startChat();
     }
     if (mounted) setState(() => _isLoadingHistory = false);
+    _checkPendingMessage();
   }
 
   Future<void> _loadOrStartConversation() async {
@@ -161,12 +160,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     try {
       final conversations = await ref.read(firestoreServiceProvider).getConversations().first;
       if (conversations.isNotEmpty) {
-        final latest = conversations.first;
-        if (DateTime.now().difference(latest.updatedAt).inHours < 24) {
-          if (mounted) setState(() => _isLoadingHistory = false);
-          await _resumeConversation(latest.id);
-          return;
-        }
+        if (mounted) setState(() => _isLoadingHistory = false);
+        await _resumeConversation(conversations.first.id);
+        return;
       }
     } catch (e) { debugPrint('Failed to load recent conversation: $e'); }
     if (mounted) setState(() => _isLoadingHistory = false);
@@ -182,8 +178,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       timestamp: DateTime.now(),
     ));
     if (mounted) setState(() {});
+    _checkPendingMessage();
+  }
 
-    // Check for a pending message from the home quick-chat widget
+  void _checkPendingMessage() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final pending = ref.read(pendingChatMessageProvider);
       if (pending != null && pending.isNotEmpty) {
@@ -197,6 +195,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   // ── selection mode ─────────────────────────────────────────────────────────
 
   void _toggleSelection(int index) {
+    HapticFeedback.selectionClick();
     setState(() {
       if (_selectedIndices.contains(index)) {
         _selectedIndices.remove(index);
@@ -241,6 +240,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
+    HapticFeedback.lightImpact();
 
     if (_chatSession == null) {
       try {
@@ -307,9 +307,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         chatNotifier.persistMessage(role: 'assistant', content: responseBuffer.toString());
       }
 
-      const contextWindowSize = 20;
       final totalMessages = _messages.where((m) => !m.isError).length;
-      if (!_isPrivate && totalMessages > contextWindowSize && totalMessages % 10 == 0) {
+      if (!_isPrivate && totalMessages > 20 && totalMessages % 15 == 0) {
         _summarizeContextInBackground();
       }
 
@@ -387,6 +386,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _showSaveConfirmation() {
+    HapticFeedback.mediumImpact();
     final userMsgCount = _messages.where((m) => m.isUser && !m.isError).length;
     showModalBottomSheet(
       context: context,
@@ -737,7 +737,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         final showAvatar = index == 0 || _messages[index - 1].isUser != message.isUser;
         final isSelected = _selectedIndices.contains(index);
 
-        return GestureDetector(
+        // Date separator (WhatsApp style)
+        Widget? dateSeparator;
+        if (index == 0 || !_isSameDay(_messages[index - 1].timestamp, message.timestamp)) {
+          dateSeparator = Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: _P.surfaceAlt,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _formatDateLabel(message.timestamp),
+                style: const TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600,
+                    color: _P.textSecondary),
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            if (dateSeparator != null) dateSeparator,
+            GestureDetector(
           onLongPress: () {
             if (!_isSelectionMode) setState(() => _isSelectionMode = true);
             _toggleSelection(index);
@@ -771,6 +795,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ],
             ),
           ),
+        ),
+          ],
         );
       },
     );
@@ -898,13 +924,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       colors: [_P.teal, _P.tealDark],
                     )
                   : null,
-              color: _canSend ? null : _P.surfaceAlt,
+              color: _canSend ? null : AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: _canSend ? _P.teal : _P.border,
+                color: _canSend ? _P.teal : AppColors.primary.withValues(alpha: 0.3),
               ),
               boxShadow: _canSend
-                  ? [const BoxShadow(color: Color(0x301FB8A0), blurRadius: 10, offset: Offset(0, 4))]
+                  ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4))]
                   : [],
             ),
             child: Material(
@@ -912,15 +938,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               child: InkWell(
                 onTap: _canSend
                     ? _sendMessage
-                    : () => Navigator.of(context).pushNamed(
-                          AppRoutes.voiceChat,
-                          arguments: widget.journalMode ? {'journalMode': true} : null,
-                        ),
+                    : () {
+                        HapticFeedback.lightImpact();
+                        MainShellState.of(context)?.switchTab(2);
+                      },
                 borderRadius: BorderRadius.circular(22),
                 child: Center(
                   child: Icon(
-                    _canSend ? Icons.arrow_upward_rounded : Icons.mic_rounded,
-                    color: _canSend ? Colors.white : _P.textSecondary,
+                    _canSend ? Icons.arrow_upward_rounded : Icons.mic_none_rounded,
+                    color: _canSend ? Colors.white : AppColors.primary,
                     size: 20,
                   ),
                 ),
@@ -1055,6 +1081,7 @@ class _PrivateToggleState extends State<_PrivateToggle>
 
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         widget.onTap();
         _expandLabel();
       },
@@ -1114,6 +1141,25 @@ class _PrivateToggleState extends State<_PrivateToggle>
       ),
     );
   }
+}
+
+// ─── Date helpers ──────────────────────────────────────────────────────────────
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+String _formatDateLabel(DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final target = DateTime(date.year, date.month, date.day);
+  final diff = today.difference(target).inDays;
+
+  if (diff == 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (date.year == now.year) return '${months[date.month - 1]} ${date.day}';
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
 // ─── Message bubble ────────────────────────────────────────────────────────────
@@ -1184,8 +1230,8 @@ class _MessageBubble extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                       color: isUser
-                          ? const Color(0x201FB8A0)
-                          : const Color(0x08000000),
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.03),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -1257,8 +1303,13 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime time) =>
-      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  String _formatTime(DateTime time) {
+    final h = time.hour;
+    final m = time.minute.toString().padLeft(2, '0');
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hour12 = h == 0 ? 12 : h > 12 ? h - 12 : h;
+    return '$hour12:$m $period';
+  }
 }
 
 // ─── Typing dot ────────────────────────────────────────────────────────────────

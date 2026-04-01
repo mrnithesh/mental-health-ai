@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -56,6 +57,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  static const _fallbackPrompt = 'What moment today are you most grateful for?';
+
   Future<void> _loadDailyPrompt() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -70,14 +73,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       final gemini = ref.read(geminiServiceProvider);
       final prompt = await gemini.generateDailyPrompt();
-      await prefs.setString(dateKey, prompt);
+      // Only cache AI-generated prompts, not the static fallback
+      if (prompt != _fallbackPrompt) {
+        await prefs.setString(dateKey, prompt);
+      }
       if (mounted) setState(() { _dailyPrompt = prompt; _loadingPrompt = false; });
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _dailyPrompt = 'What moment today are you most grateful for?';
-          _loadingPrompt = false;
-        });
+        setState(() { _dailyPrompt = _fallbackPrompt; _loadingPrompt = false; });
       }
     }
   }
@@ -97,14 +100,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final firestoreService = ref.read(firestoreServiceProvider);
       final now = DateTime.now();
 
-      // Current week activity dots
+      // Collect active dates from both moods and journals
       final weekStart = now.subtract(Duration(days: now.weekday - 1));
       final weekEnd = weekStart.add(const Duration(days: 7));
       final moods = await firestoreService.getMoodsInRange(weekStart, weekEnd);
-      final moodDays = moods.map((m) => m.date.weekday).toSet();
+      final journals = await firestoreService.getJournals().first;
+
       final weekActivity = List.filled(7, false);
-      for (final day in moodDays) {
-        if (day >= 1 && day <= 7) weekActivity[day - 1] = true;
+      for (final m in moods) {
+        final wd = m.date.weekday;
+        if (wd >= 1 && wd <= 7) weekActivity[wd - 1] = true;
+      }
+      for (final j in journals) {
+        final d = j.createdAt;
+        if (!d.isBefore(weekStart) && d.isBefore(weekEnd)) {
+          final wd = d.weekday;
+          if (wd >= 1 && wd <= 7) weekActivity[wd - 1] = true;
+        }
       }
 
       // True consecutive streak: check backwards up to 30 days
@@ -114,6 +126,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final d = m.date;
         return DateTime(d.year, d.month, d.day);
       }).toSet();
+      // Also count journal creation dates
+      for (final j in journals) {
+        final d = j.createdAt;
+        activeDates.add(DateTime(d.year, d.month, d.day));
+      }
 
       int streak = 0;
       var checkDate = DateTime(now.year, now.month, now.day);
@@ -132,6 +149,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _saveMood(int score) async {
+    HapticFeedback.lightImpact();
     setState(() { _selectedMood = score; _moodSaved = true; });
 
     const emojis = {1: '😢', 2: '😕', 3: '😐', 4: '🙂', 5: '😄'};
@@ -395,7 +413,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: InkWell(
         onTap: _dailyPrompt != null
             ? () => Navigator.pushNamed(context, AppRoutes.journalEditor,
-                arguments: JournalEditorArgs(prefillTitle: _dailyPrompt))
+                arguments: JournalEditorArgs(
+                  prefillTitle: 'Daily Reflection',
+                  prefillContent: '$_dailyPrompt\n\n',
+                ))
             : null,
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Row(
