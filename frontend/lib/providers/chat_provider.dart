@@ -5,6 +5,9 @@ import '../models/conversation_model.dart';
 import '../services/firestore_service.dart';
 import 'service_providers.dart';
 
+/// A message typed on the home screen quick-chat, to be auto-sent when Chat tab opens
+final pendingChatMessageProvider = StateProvider<String?>((ref) => null);
+
 /// Stream of all conversations for the current user
 final conversationsProvider = StreamProvider<List<ConversationModel>>((ref) {
   final firestoreService = ref.watch(firestoreServiceProvider);

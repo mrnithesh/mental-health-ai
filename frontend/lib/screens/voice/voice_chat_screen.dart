@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import '../../config/constants.dart';
 import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
@@ -30,6 +31,8 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
   VoiceState _state = VoiceState.idle;
   final List<_TranscriptMessage> _transcript = [];
   String? _errorMessage;
+  String? _warningMessage;
+  bool _warningUrgent = false;
   bool _savedAsJournal = false;
   bool _isSummarizing = false;
   bool _isMuted = false;
@@ -156,12 +159,17 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
       _session = await geminiService.connectLive();
       debugPrint('[VOICE] ✅ Connected to Gemini Live API');
 
-      // Start duration timer
       _durationTimer?.cancel();
       _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        setState(() {
-          _sessionDuration = Duration(seconds: timer.tick);
-        });
+        if (!mounted) { timer.cancel(); return; }
+        final elapsed = Duration(seconds: timer.tick);
+        setState(() => _sessionDuration = elapsed);
+
+        final remaining = AppConstants.voiceSessionMaxDuration - timer.tick;
+        if (remaining == 180) _showTimeWarning('3 minutes remaining');
+        if (remaining == 60) _showTimeWarning('1 minute remaining');
+        if (remaining == 30) _showTimeWarning('30 seconds remaining', urgent: true);
+        if (remaining <= 0) _endSessionDueToTimeout();
       });
 
       debugPrint('[VOICE] Starting receive and record handlers...');
@@ -431,6 +439,79 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     }
   }
 
+  void _showTimeWarning(String msg, {bool urgent = false}) {
+    if (!mounted) return;
+    setState(() {
+      _warningMessage = msg;
+      _warningUrgent = urgent;
+    });
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _warningMessage == msg) {
+        setState(() => _warningMessage = null);
+      }
+    });
+  }
+
+  Future<void> _endSessionDueToTimeout() async {
+    await _disconnect();
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Icon(Icons.timer_off_rounded, size: 36, color: AppColors.accent),
+            const SizedBox(height: 12),
+            const Text(
+              'Session time limit reached',
+              style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Voice sessions are limited to 10 minutes.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            if (_hasEnoughTranscript && !_savedAsJournal)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _showJournalPrompt();
+                  },
+                  child: const Text('Save as Journal'),
+                ),
+              ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _endSession() async {
     await _disconnect();
   }
@@ -602,6 +683,13 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
     }
   }
 
+  Color get _timerColor {
+    final remaining = AppConstants.voiceSessionMaxDuration - _sessionDuration.inSeconds;
+    if (remaining <= 60) return AppColors.error;
+    if (remaining <= 180) return AppColors.accent;
+    return AppColors.primaryLight;
+  }
+
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
@@ -672,16 +760,15 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
         backgroundColor: AppColors.background,
         body: Stack(
           children: [
-            // Perplexity-like dark gradient background
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFF0A0F25),
-                    Color(0xFF121B3E),
-                    Color(0xFF0C1229),
+                    Color(0xFF0D2818),
+                    Color(0xFF1B4332),
+                    Color(0xFF0D2818),
                   ],
                 ),
               ),
@@ -694,7 +781,6 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                 ),
               ),
             ),
-            // Content
             SafeArea(
               child: Column(
                 children: [
@@ -703,7 +789,9 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                     child: Column(
                       children: [
                         const Spacer(flex: 1),
-                        _buildMicrophoneButton(),
+                        _state == VoiceState.speaking
+                            ? _buildSpeakingOrb()
+                            : _buildMicrophoneButton(),
                         const SizedBox(height: 20),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 300),
@@ -738,6 +826,53 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                 ],
               ),
             ),
+            if (_warningMessage != null)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 60,
+                left: 24,
+                right: 24,
+                child: AnimatedOpacity(
+                  opacity: _warningMessage != null ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _warningUrgent
+                          ? AppColors.error.withValues(alpha: 0.95)
+                          : AppColors.accent.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _warningUrgent
+                              ? Icons.warning_rounded
+                              : Icons.timer_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          _warningMessage!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -751,7 +886,6 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
         children: [
           const SizedBox(width: 48),
 
-          // CENTER: Title with Duration
           Expanded(
             child: Column(
               children: [
@@ -762,17 +896,33 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                       ),
                   textAlign: TextAlign.center,
                 ),
-                if (_state == VoiceState.listening ||
-                    _state == VoiceState.speaking)
+                if (_state != VoiceState.idle)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      _formatDuration(_sessionDuration),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textTertiary,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_state == VoiceState.listening ||
+                            _state == VoiceState.speaking)
+                          Container(
+                            width: 6, height: 6,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _timerColor,
+                            ),
+                          ),
+                        Text(
+                          _formatDuration(_sessionDuration),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _timerColor,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -904,6 +1054,113 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                         ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpeakingOrb() {
+    return GestureDetector(
+      onTap: _onMicTap,
+      child: SizedBox(
+        width: 200,
+        height: 200,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Outer glow ring - slow breathe
+            AnimatedBuilder(
+              animation: _breatheController,
+              builder: (ctx, _) {
+                return Transform.scale(
+                  scale: _breatheAnimation.value * 1.1,
+                  child: Container(
+                    width: 170,
+                    height: 170,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.secondary.withValues(alpha: 0.06),
+                    ),
+                  ),
+                );
+              },
+            ),
+            // Middle pulse ring
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (ctx, _) {
+                return Transform.scale(
+                  scale: _pulseAnimation.value * 1.05,
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.secondary.withValues(alpha: 0.15),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            // Inner shimmer ring
+            AnimatedBuilder(
+              animation: _waveController,
+              builder: (ctx, _) {
+                final val = _waveController.value;
+                final scale = 1.0 + val * 0.08;
+                return Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.secondary.withValues(alpha: 0.1),
+                    ),
+                  ),
+                );
+              },
+            ),
+            // Core orb with gradient + glow
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (ctx, _) {
+                final scale = 0.95 + (_pulseAnimation.value - 1.0) * 1.5;
+                return Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const RadialGradient(
+                        colors: [
+                          AppColors.secondary,
+                          AppColors.secondaryDark,
+                        ],
+                        center: Alignment(-0.2, -0.2),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.secondary.withValues(alpha: 0.35),
+                          blurRadius: 28,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.graphic_eq_rounded,
+                      color: Colors.white,
+                      size: 36,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -1066,15 +1323,15 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                   end: Alignment.bottomRight,
                   colors: _isMuted
                       ? const [Color(0xFF4B5563), Color(0xFF374151)]
-                      : const [Color(0xFF3A9B5A), Color(0xFF2D6A3E)],
+                      : const [AppColors.primary, AppColors.primaryDark],
                 ),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: (_isMuted
                             ? const Color(0xFF4B5563)
-                            : const Color(0xFF3A9B5A))
-                        .withOpacity(0.3),
+                            : AppColors.primary)
+                        .withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),

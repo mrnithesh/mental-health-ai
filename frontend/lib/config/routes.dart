@@ -12,7 +12,7 @@ import '../screens/journal/journal_list_screen.dart';
 import '../screens/journal/journal_editor_screen.dart';
 import '../screens/mood/mood_tracker_screen.dart';
 import '../screens/mood/mood_history_screen.dart';
-import '../screens/onboarding/voice_setup_screen.dart';
+import '../screens/onboarding/onboarding_screen.dart';
 import '../screens/settings/settings_screen.dart';
 
 class AppRoutes {
@@ -20,7 +20,8 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String phoneAuth = '/phone-auth';
-  static const String voiceSetup = '/voice-setup';
+  static const String onboarding = '/onboarding';
+  static const String voiceSetup = '/onboarding'; // legacy alias
   static const String main = '/main';
   static const String home = '/home';
   static const String chat = '/chat';
@@ -45,8 +46,8 @@ class AppRoutes {
       case phoneAuth:
         return MaterialPageRoute(builder: (_) => const PhoneAuthScreen());
 
-      case voiceSetup:
-        return _fadeSlideRoute(const VoiceSetupScreen());
+      case onboarding:
+        return _fadeSlideRoute(const OnboardingScreen());
 
       case main:
         return MaterialPageRoute(builder: (_) => const MainShell());

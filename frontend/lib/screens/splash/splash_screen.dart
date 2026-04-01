@@ -61,8 +61,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
-    final route = user != null ? AppRoutes.main : AppRoutes.login;
-    Navigator.of(context).pushReplacementNamed(route);
+    if (user == null) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      return;
+    }
+
+    // Validate the token is still valid (catches deleted accounts)
+    try {
+      await user.reload();
+      // reload() throws if the user was deleted from the console
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(AppRoutes.main);
+    } catch (e) {
+      debugPrint('Splash: user token invalid, signing out: $e');
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+    }
   }
 
   @override

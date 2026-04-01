@@ -11,37 +11,30 @@ import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 
-// ─── Perplexity-inspired light palette ────────────────────────────────────────
 class _P {
-  // Backgrounds
-  static const bg         = Color(0xFFFAFAF8);      // warm off-white page
-  static const surface    = Color(0xFFFFFFFF);       // pure white cards/bubbles
-  static const surfaceAlt = Color(0xFFF4F4F1);       // very light warm gray
-  static const inputBg    = Color(0xFFFFFFFF);       // always white so text is visible
+  static const bg         = AppColors.background;
+  static const surface    = AppColors.surface;
+  static const surfaceAlt = AppColors.surfaceVariant;
+  static const inputBg    = AppColors.surface;
 
-  // Borders
-  static const border     = Color(0xFFE5E5E0);
-  static const borderFocus= Color(0xFF1FB8A0);       // teal focus ring
+  static const border     = Color(0xFFD4E8DC);
+  static const borderFocus= AppColors.primary;
 
-  // Perplexity teal/cyan accent
-  static const teal       = Color(0xFF1FB8A0);
-  static const tealLight  = Color(0xFFE6F7F5);
-  static const tealDark   = Color(0xFF178A77);
+  static const teal       = AppColors.primary;
+  static const tealLight  = AppColors.surfaceVariant;
+  static const tealDark   = AppColors.primaryDark;
 
-  // User bubble: warm amber/gold (kept from original design identity)
-  static const userBubble    = Color(0xFF1FB8A0);    // switched to teal for cohesion
-  static const userBubbleDark= Color(0xFF178A77);
+  static const userBubble    = AppColors.primary;
+  static const userBubbleDark= AppColors.primaryDark;
 
-  // Text
-  static const textPrimary   = Color(0xFF1A1A18);
-  static const textSecondary = Color(0xFF6B6B63);
-  static const textHint      = Color(0xFFAFAFA8);
+  static const textPrimary   = AppColors.textPrimary;
+  static const textSecondary = AppColors.textSecondary;
+  static const textHint      = AppColors.textTertiary;
   static const textOnTeal    = Color(0xFFFFFFFF);
 
-  // Utility
-  static const error      = Color(0xFFDC2626);
+  static const error      = AppColors.error;
   static const errorBg    = Color(0xFFFEF2F2);
-  static const online     = Color(0xFF22C55E);
+  static const online     = AppColors.success;
   static const shadow     = Color(0x0C000000);
 }
 
@@ -189,6 +182,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       timestamp: DateTime.now(),
     ));
     if (mounted) setState(() {});
+
+    // Check for a pending message from the home quick-chat widget
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = ref.read(pendingChatMessageProvider);
+      if (pending != null && pending.isNotEmpty) {
+        ref.read(pendingChatMessageProvider.notifier).state = null;
+        _messageController.text = pending;
+        _sendMessage();
+      }
+    });
   }
 
   // ── selection mode ─────────────────────────────────────────────────────────
@@ -1129,10 +1132,10 @@ class _MessageBubble extends StatelessWidget {
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Color(0xFF4ECDC4), Color(0xFF1FB8A0)],
+                          colors: [AppColors.primaryLight, AppColors.primary],
                         ),
                         borderRadius: BorderRadius.circular(9),
-                        boxShadow: const [BoxShadow(color: Color(0x201FB8A0), blurRadius: 6, offset: Offset(0, 2))],
+                        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.12), blurRadius: 6, offset: const Offset(0, 2))],
                       ),
                       child: const Icon(Icons.person_rounded, color: Colors.white, size: 14),
                     ),

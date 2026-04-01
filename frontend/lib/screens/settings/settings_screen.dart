@@ -6,6 +6,7 @@ import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/nickname_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../widgets/voice_picker.dart';
 
@@ -97,13 +98,13 @@ class SettingsScreen extends ConsumerWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      const Color(0xFF3A9B5A).withValues(alpha: 0.08),
-                      const Color(0xFF2D6A3E).withValues(alpha: 0.04),
+                      AppColors.primary.withValues(alpha: 0.08),
+                      AppColors.secondaryDark.withValues(alpha: 0.04),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                   border: Border.all(
-                    color: const Color(0xFF4A7C59).withValues(alpha: 0.25),
+                    color: AppColors.textSecondary.withValues(alpha: 0.25),
                     width: 1.5,
                   ),
                 ),
@@ -116,7 +117,7 @@ class SettingsScreen extends ConsumerWidget {
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Color(0xFF3A9B5A), Color(0xFF2E8B57)],
+                          colors: [AppColors.primary, AppColors.primaryDark],
                         ),
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
@@ -154,10 +155,10 @@ class SettingsScreen extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF3A9B5A).withValues(alpha: 0.12),
+                        color: AppColors.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: const Color(0xFF4A7C59).withValues(alpha: 0.2),
+                          color: AppColors.textSecondary.withValues(alpha: 0.2),
                         ),
                       ),
                       child: const Text(
@@ -165,7 +166,7 @@ class SettingsScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF3A9B5A),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -203,7 +204,7 @@ class SettingsScreen extends ConsumerWidget {
                 icon: Icons.info_outline_rounded,
                 title: 'Amigo',
                 subtitle: 'Version 1.0.0 — Your AI Companion',
-                color: Color(0xFF3A9B5A),
+                color: AppColors.primary,
               ),
             ],
           ),
@@ -233,6 +234,7 @@ class SettingsScreen extends ConsumerWidget {
 
     if (confirmed != true || !context.mounted) return;
 
+    ref.read(geminiServiceProvider).resetForNewUser();
     await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil(
@@ -292,13 +294,13 @@ class _NicknameEditorState extends State<_NicknameEditor> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF3A9B5A).withValues(alpha: 0.08),
-            const Color(0xFF2D6A3E).withValues(alpha: 0.04),
+            AppColors.primary.withValues(alpha: 0.08),
+            AppColors.secondaryDark.withValues(alpha: 0.04),
           ],
         ),
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(
-          color: const Color(0xFF4A7C59).withValues(alpha: 0.25),
+          color: AppColors.textSecondary.withValues(alpha: 0.25),
           width: 1.5,
         ),
       ),
@@ -336,14 +338,14 @@ class _NicknameEditorState extends State<_NicknameEditor> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                       borderSide: const BorderSide(
-                        color: Color(0xFF4A7C59),
+                        color: AppColors.textSecondary,
                         width: 1.5,
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                       borderSide: const BorderSide(
-                        color: Color(0xFF3A9B5A),
+                        color: AppColors.primary,
                         width: 2,
                       ),
                     ),
@@ -360,12 +362,12 @@ class _NicknameEditorState extends State<_NicknameEditor> {
                       gradient: const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xFF3A9B5A), Color(0xFF2D6A3E)],
+                        colors: [AppColors.primary, AppColors.secondaryDark],
                       ),
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF3A9B5A).withValues(alpha: 0.2),
+                          color: AppColors.primary.withValues(alpha: 0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -406,13 +408,13 @@ class _ProfileCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF2D6A3E).withValues(alpha: 0.12),
-            const Color(0xFF1B4D2B).withValues(alpha: 0.06),
+            AppColors.secondaryDark.withValues(alpha: 0.12),
+            AppColors.primaryDark.withValues(alpha: 0.06),
           ],
         ),
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(
-          color: const Color(0xFF4A7C59).withValues(alpha: 0.25),
+          color: AppColors.textSecondary.withValues(alpha: 0.25),
           width: 1.5,
         ),
       ),
@@ -425,7 +427,7 @@ class _ProfileCard extends StatelessWidget {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF3A9B5A), Color(0xFF2D6A3E)],
+                colors: [AppColors.primary, AppColors.secondaryDark],
               ),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
@@ -434,7 +436,7 @@ class _ProfileCard extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF3A9B5A).withValues(alpha: 0.25),
+                  color: AppColors.primary.withValues(alpha: 0.25),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),

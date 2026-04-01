@@ -193,14 +193,14 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFDF5F0),
+              AppColors.surfaceVariant.withValues(alpha: 0.5),
               AppColors.background,
-              Color(0xFFF5F8F5),
+              AppColors.background,
             ],
           ),
         ),

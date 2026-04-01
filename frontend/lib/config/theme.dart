@@ -1,51 +1,51 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Primary — warm coral
-  static const Color primary = Color(0xFFD97756);
-  static const Color primaryLight = Color(0xFFE8A08A);
-  static const Color primaryDark = Color(0xFFB85C3F);
+  // Primary — soft teal-green
+  static const Color primary = Color(0xFF40916C);
+  static const Color primaryLight = Color(0xFF74C69D);
+  static const Color primaryDark = Color(0xFF1B4332);
 
-  // Secondary — soft sage
-  static const Color secondary = Color(0xFF8BAA90);
-  static const Color secondaryLight = Color(0xFFB0CEAB);
-  static const Color secondaryDark = Color(0xFF6B8D6F);
+  // Secondary — fresh sage-green
+  static const Color secondary = Color(0xFF52B788);
+  static const Color secondaryLight = Color(0xFF95D5B2);
+  static const Color secondaryDark = Color(0xFF2D6A4F);
 
-  // Accent — warm amber
+  // Accent — warm amber (contrast highlight)
   static const Color accent = Color(0xFFE8A838);
   static const Color accentLight = Color(0xFFF0C468);
 
-  // Neutral — warm tones
-  static const Color background = Color(0xFFFAF8F5);
+  // Neutral
+  static const Color background = Color(0xFFF5FBF8);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFF0ECE6);
+  static const Color surfaceVariant = Color(0xFFE8F5EE);
 
-  // Glassmorphism gradients
-  static const Color gradientStart = Color(0xFFC9D6FF);
-  static const Color gradientEnd = Color(0xFFE2E2E2);
+  // Glassmorphism
+  static const Color gradientStart = Color(0xFFB7E4C7);
+  static const Color gradientEnd = Color(0xFFD8F3DC);
 
-  // Text — warm charcoal
-  static const Color textPrimary = Color(0xFF2D2520);
-  static const Color textSecondary = Color(0xFF6B6560);
-  static const Color textTertiary = Color(0xFF9A9490);
+  // Text — forest tones
+  static const Color textPrimary = Color(0xFF1A2E22);
+  static const Color textSecondary = Color(0xFF4A6B55);
+  static const Color textTertiary = Color(0xFF8BA89A);
 
   // Status
-  static const Color success = Color(0xFF4CAF6A);
+  static const Color success = Color(0xFF40916C);
   static const Color warning = Color(0xFFE8A838);
   static const Color error = Color(0xFFD94F4F);
   static const Color info = Color(0xFF5A8FD4);
 
   // Mood
-  static const Color moodExcellent = Color(0xFF4CAF6A);
-  static const Color moodGood = Color(0xFF8BAA90);
+  static const Color moodExcellent = Color(0xFF40916C);
+  static const Color moodGood = Color(0xFF52B788);
   static const Color moodNeutral = Color(0xFFE8A838);
   static const Color moodBad = Color(0xFFE88D4F);
   static const Color moodTerrible = Color(0xFFD94F4F);
 
-  // Dark theme — warm darks
-  static const Color darkBackground = Color(0xFF1A1614);
-  static const Color darkSurface = Color(0xFF2A2520);
-  static const Color darkSurfaceVariant = Color(0xFF3A3530);
+  // Dark theme
+  static const Color darkBackground = Color(0xFF0D1B12);
+  static const Color darkSurface = Color(0xFF162420);
+  static const Color darkSurfaceVariant = Color(0xFF233D32);
 }
 
 class AppRadius {
@@ -61,7 +61,6 @@ class AppSpacing {
   static const double md = 16;
   static const double lg = 24;
   static const double xl = 32;
-  // Glassmorphism spacing
   static const double screenPadding = 24;
   static const double component = 16;
   static const double grid = 12;
@@ -69,15 +68,15 @@ class AppSpacing {
 
 class AppGlass {
   static BoxDecoration get container => BoxDecoration(
-        color: Colors.white.withOpacity(0.3),
+        color: Colors.white.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: Colors.white.withValues(alpha: 0.2),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 20,
             spreadRadius: 1,
           ),
@@ -94,55 +93,55 @@ class AppGradients {
 }
 
 class AppTheme {
-  static const _fontFamily = 'Inter'; // Modern font for glassmorphism
+  static const _fontFamily = 'Inter';
 
   static TextTheme get _textTheme => const TextTheme(
         headlineLarge: TextStyle(
-          fontSize: 26, // Updated for title
+          fontSize: 26,
           fontWeight: FontWeight.bold,
           letterSpacing: -0.5,
         ),
         headlineMedium: TextStyle(
-          fontSize: 22, // Adjusted
+          fontSize: 22,
           fontWeight: FontWeight.bold,
           letterSpacing: -0.3,
         ),
         titleLarge: TextStyle(
-          fontSize: 20, // Updated for header
+          fontSize: 20,
           fontWeight: FontWeight.w600,
         ),
         titleMedium: TextStyle(
-          fontSize: 18, // Adjusted
+          fontSize: 18,
           fontWeight: FontWeight.w600,
         ),
         titleSmall: TextStyle(
-          fontSize: 16, // Adjusted
+          fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
         bodyLarge: TextStyle(
-          fontSize: 16, // Adjusted
+          fontSize: 16,
           fontWeight: FontWeight.normal,
           height: 1.5,
         ),
         bodyMedium: TextStyle(
-          fontSize: 16, // Updated for chat
+          fontSize: 16,
           fontWeight: FontWeight.normal,
           height: 1.4,
         ),
         bodySmall: TextStyle(
-          fontSize: 13, // Updated for small
+          fontSize: 13,
           fontWeight: FontWeight.normal,
         ),
         labelLarge: TextStyle(
-          fontSize: 15, // Updated for button
+          fontSize: 15,
           fontWeight: FontWeight.w600,
         ),
         labelMedium: TextStyle(
-          fontSize: 14, // Adjusted
+          fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
         labelSmall: TextStyle(
-          fontSize: 12, // Adjusted
+          fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
       );
@@ -151,7 +150,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      fontFamily: _fontFamily == 'default' ? null : _fontFamily,
+      fontFamily: _fontFamily,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         onPrimary: Colors.white,
@@ -271,7 +270,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: _fontFamily == 'default' ? null : _fontFamily,
+      fontFamily: _fontFamily,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primaryLight,
         onPrimary: AppColors.darkBackground,

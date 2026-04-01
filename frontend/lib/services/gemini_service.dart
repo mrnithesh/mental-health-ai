@@ -115,6 +115,17 @@ Guidelines:
     _rebuildChatModel();
   }
 
+  void resetForNewUser() {
+    _currentUserName = 'Friend';
+    _currentPersonality = _defaultPersonality;
+    _currentVoiceName = 'Nila';
+    _currentVoiceCode = 'Leda';
+    _rebuildChatModel();
+    final ai = FirebaseAI.googleAI(auth: FirebaseAuth.instance);
+    _voiceModel = _buildVoiceModel(ai, 'Leda');
+    debugPrint('GeminiService: reset for new user');
+  }
+
   void _rebuildChatModel() {
     final ai = FirebaseAI.googleAI(auth: FirebaseAuth.instance);
     _chatModel = ai.generativeModel(

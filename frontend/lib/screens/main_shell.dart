@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:water_drop_nav_bar/water_drop_nav_bar.dart';
 
 import '../config/theme.dart';
 import '../providers/voice_provider.dart';
@@ -18,14 +20,45 @@ class MainShell extends ConsumerStatefulWidget {
 
 class MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
+  late PageController _pageController;
+
+  // Maps: 0=Home, 1=Chat, 2=Voice, 3=Journal, 4=Settings
+  // WaterDropNavBar items: 0=Home, 1=Chat, 2=Journal, 3=Settings
+  // Voice (index 2 in pages) is accessed only via the FAB.
 
   static MainShellState? of(BuildContext context) =>
       context.findAncestorStateOfType<MainShellState>();
 
-  void switchTab(int index) {
-    if (index >= 0 && index < _screens.length) {
-      setState(() => _currentIndex = index);
-    }
+  void switchTab(int screenIndex) {
+    if (screenIndex < 0 || screenIndex > 4) return;
+    setState(() => _currentIndex = screenIndex);
+    _pageController.jumpToPage(screenIndex);
+  }
+
+  int get _navBarIndex {
+    if (_currentIndex <= 1) return _currentIndex;
+    if (_currentIndex == 2) return -1; // voice - not in nav bar
+    return _currentIndex - 1; // 3→2, 4→3
+  }
+
+  void _onNavBarTap(int navIndex) {
+    // navIndex: 0=Home, 1=Chat, 2=Journal, 3=Settings → screen: 0, 1, 3, 4
+    final screenMap = [0, 1, 3, 4];
+    final screenIndex = screenMap[navIndex];
+    setState(() => _currentIndex = screenIndex);
+    _pageController.jumpToPage(screenIndex);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   final List<Widget> _screens = const [
@@ -43,67 +76,58 @@ class MainShellState extends ConsumerState<MainShell> {
     final hideNavBar = isVoiceScreen && voiceSessionActive;
     final hideVoiceFab = _currentIndex == 1 || hideNavBar;
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        systemNavigationBarColor: hideNavBar ? AppColors.background : AppColors.surface,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      bottomNavigationBar: hideNavBar ? null : _buildBottomBar(),
-      floatingActionButton: hideVoiceFab ? null : _buildVoiceFab(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavItem(
-                icon: Icons.home_outlined,
-                activeIcon: Icons.home_rounded,
-                label: 'Home',
-                isSelected: _currentIndex == 0,
-                onTap: () => setState(() => _currentIndex = 0),
-              ),
-              _NavItem(
-                icon: Icons.chat_bubble_outline_rounded,
-                activeIcon: Icons.chat_bubble_rounded,
-                label: 'Chat',
-                isSelected: _currentIndex == 1,
-                onTap: () => setState(() => _currentIndex = 1),
-              ),
-              if (_currentIndex != 1) const SizedBox(width: 56),
-              _NavItem(
-                icon: Icons.edit_note_outlined,
-                activeIcon: Icons.edit_note_rounded,
-                label: 'Journal',
-                isSelected: _currentIndex == 3,
-                onTap: () => setState(() => _currentIndex = 3),
-              ),
-              _NavItem(
-                icon: Icons.settings_outlined,
-                activeIcon: Icons.settings_rounded,
-                label: 'Settings',
-                isSelected: _currentIndex == 4,
-                onTap: () => setState(() => _currentIndex = 4),
-              ),
-            ],
-          ),
+      child: Scaffold(
+        body: PageView(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          children: _screens,
         ),
+        bottomNavigationBar: hideNavBar
+            ? null
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryDark.withValues(alpha: 0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: WaterDropNavBar(
+                  backgroundColor: AppColors.surface,
+                  waterDropColor: AppColors.primary,
+                  inactiveIconColor: AppColors.textTertiary,
+                  iconSize: 26,
+                  onItemSelected: _onNavBarTap,
+                  selectedIndex: _navBarIndex.clamp(0, 3),
+                  barItems: [
+                    BarItem(
+                      filledIcon: Icons.home_rounded,
+                      outlinedIcon: Icons.home_outlined,
+                    ),
+                    BarItem(
+                      filledIcon: Icons.chat_bubble_rounded,
+                      outlinedIcon: Icons.chat_bubble_outline_rounded,
+                    ),
+                    BarItem(
+                      filledIcon: Icons.edit_note_rounded,
+                      outlinedIcon: Icons.edit_note_outlined,
+                    ),
+                    BarItem(
+                      filledIcon: Icons.settings_rounded,
+                      outlinedIcon: Icons.settings_outlined,
+                    ),
+                  ],
+                ),
+              ),
+        floatingActionButton: hideVoiceFab ? null : _buildVoiceFab(),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       ),
     );
   }
@@ -111,7 +135,7 @@ class MainShellState extends ConsumerState<MainShell> {
   Widget _buildVoiceFab() {
     final isActive = _currentIndex == 2;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = 2),
+      onTap: () => switchTab(2),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
@@ -139,59 +163,6 @@ class MainShellState extends ConsumerState<MainShell> {
           isActive ? Icons.mic : Icons.mic_none_rounded,
           color: Colors.white,
           size: 28,
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                isSelected ? activeIcon : icon,
-                key: ValueKey(isSelected),
-                color:
-                    isSelected ? AppColors.primary : AppColors.textTertiary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color:
-                    isSelected ? AppColors.primary : AppColors.textTertiary,
-              ),
-            ),
-          ],
         ),
       ),
     );

@@ -35,6 +35,7 @@ dependencies:
   # UI Components
   fl_chart: ^0.66.0
   intl: ^0.18.1
+  water_drop_nav_bar: ^2.2.2
   
   # Utilities
   shared_preferences: ^2.2.2
