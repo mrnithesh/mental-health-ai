@@ -8,6 +8,8 @@ import '../../config/theme.dart';
 import '../../providers/nickname_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
+import '../../widgets/app_logo.dart';
+import '../../widgets/user_avatar.dart';
 import '../../widgets/voice_picker.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -168,23 +170,19 @@ class _WelcomePage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 100,
-            height: 100,
+            width: 120,
+            height: 120,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.primaryLight],
-              ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
+                  color: AppColors.primary.withValues(alpha: 0.25),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Colors.white, size: 48),
+            child: const AppLogo(withText: true, size: 120, borderRadius: 28),
           ),
           const SizedBox(height: 32),
           Text(
@@ -216,30 +214,68 @@ class _WelcomePage extends StatelessWidget {
   }
 }
 
-class _NicknamePage extends StatelessWidget {
+class _NicknamePage extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback onNext;
   const _NicknamePage({required this.controller, required this.onNext});
 
   @override
+  State<_NicknamePage> createState() => _NicknamePageState();
+}
+
+class _NicknamePageState extends State<_NicknamePage> {
+  final _user = FirebaseAuth.instance.currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTextChange);
+  }
+
+  void _onTextChange() => setState(() {});
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChange);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final typedName = widget.controller.text.trim();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child:
-                const Icon(Icons.badge_rounded, color: AppColors.primary, size: 40),
+          // Avatar preview — live-updates as the user types
+          Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              UserAvatar(
+                user: _user,
+                displayName: typedName.isNotEmpty ? typedName : null,
+                size: 88,
+                borderColor: AppColors.primary.withValues(alpha: 0.35),
+                borderWidth: 3,
+              ),
+              // Small edit badge
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(Icons.edit_rounded,
+                    color: Colors.white, size: 13),
+              ),
+            ],
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           Text(
             'What should your\nAmigo call you?',
             style: tt.headlineMedium?.copyWith(
@@ -252,11 +288,12 @@ class _NicknamePage extends StatelessWidget {
             style: tt.bodyMedium?.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
           TextField(
-            controller: controller,
+            controller: widget.controller,
             textCapitalization: TextCapitalization.words,
             textAlign: TextAlign.center,
+            autofocus: true,
             style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
@@ -271,11 +308,11 @@ class _NicknamePage extends StatelessWidget {
               fillColor: AppColors.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppRadius.lg),
-                borderSide: BorderSide(color: AppColors.surfaceVariant),
+                borderSide: const BorderSide(color: AppColors.surfaceVariant),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppRadius.lg),
-                borderSide: BorderSide(color: AppColors.surfaceVariant),
+                borderSide: const BorderSide(color: AppColors.surfaceVariant),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -290,7 +327,7 @@ class _NicknamePage extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: onNext,
+              onPressed: widget.onNext,
               style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16)),
               child: const Text('Continue'),
@@ -418,24 +455,12 @@ class _ReadyPageState extends State<_ReadyPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.secondary, AppColors.primary],
-              ),
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.check_rounded,
-                color: Colors.white, size: 48),
+          UserAvatar(
+            user: FirebaseAuth.instance.currentUser,
+            displayName: widget.nickname.isNotEmpty ? widget.nickname : null,
+            size: 88,
+            borderColor: AppColors.primary.withValues(alpha: 0.4),
+            borderWidth: 3,
           ),
           const SizedBox(height: 32),
           Text(
@@ -461,36 +486,59 @@ class _ReadyPageState extends State<_ReadyPage> {
             ),
           ),
           const SizedBox(height: 16),
-          GestureDetector(
-            onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 22, height: 22,
+                CheckboxTheme(
+                  data: CheckboxThemeData(
+                    fillColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return AppColors.primary;
+                      }
+                      return Colors.transparent;
+                    }),
+                    checkColor: WidgetStateProperty.all(Colors.white),
+                    side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.85),
+                      width: 2,
+                    ),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
                   child: Checkbox(
                     value: _agreedToTerms,
-                    onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
-                    activeColor: AppColors.primary,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (v) =>
+                        setState(() => _agreedToTerms = v ?? false),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 Expanded(
                   child: GestureDetector(
                     onTap: _showTerms,
                     child: Text.rich(
                       TextSpan(
                         text: 'I agree to the ',
-                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.35,
+                          color: AppColors.textPrimary,
+                        ),
                         children: [
                           TextSpan(
                             text: 'Terms & Conditions',
                             style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: AppColors.primaryDark,
+                              fontWeight: FontWeight.w700,
                               decoration: TextDecoration.underline,
+                              decorationColor: AppColors.primaryDark,
                             ),
                           ),
                         ],
@@ -504,10 +552,15 @@ class _ReadyPageState extends State<_ReadyPage> {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
+            child: FilledButton(
               onPressed: _agreedToTerms ? widget.onFinish : null,
-              style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16)),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppColors.surfaceVariant,
+                disabledForegroundColor: AppColors.textSecondary,
+              ),
               child: const Text('Let\'s Go!'),
             ),
           ),

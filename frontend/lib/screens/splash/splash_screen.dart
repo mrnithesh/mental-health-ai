@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
+import '../../widgets/app_logo.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -131,37 +132,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                 ),
                               ],
                             ),
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(30),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.spa_rounded,
-                                size: 56,
-                                color: Colors.white,
-                              ),
+                            child: const AppLogo(
+                              withText: true,
+                              size: 120,
+                              borderRadius: 30,
                             ),
                           );
                         },
                       ),
-                      const SizedBox(height: 28),
-                      const Text(
-                        'Amigo',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 24),
                       Text(
                         'Your AI Companion',
                         style: TextStyle(

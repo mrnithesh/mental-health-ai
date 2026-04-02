@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +9,9 @@ import '../../config/theme.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/nickname_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/animated_list_item.dart';
+import '../../widgets/user_avatar.dart';
 import '../../widgets/glass_card.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 import '../main_shell.dart';
@@ -237,6 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildGreeting(TextTheme tt) {
+    final user = FirebaseAuth.instance.currentUser;
     return Row(
       children: [
         Expanded(
@@ -250,7 +254,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
-        _buildStatusChip(),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            UserAvatar(
+              user: user,
+              displayName: _userName,
+              size: 44,
+              borderColor: AppColors.primary.withValues(alpha: 0.3),
+              borderWidth: 2,
+            ),
+            const SizedBox(height: 4),
+            _buildStatusChip(),
+          ],
+        ),
       ],
     );
   }
@@ -309,15 +327,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 52, height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                  ),
-                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 28),
-                ),
+                const AppLogo(size: 52, borderRadius: 16),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(

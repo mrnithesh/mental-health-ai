@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
+import '../../config/constants.dart';
 import '../../config/theme.dart';
 import '../../models/mood_model.dart';
 import '../../providers/mood_provider.dart';
@@ -63,7 +64,7 @@ class MoodHistoryScreen extends ConsumerWidget {
               children: [
                 _MoodSummaryRow(moods: moods),
                 const SizedBox(height: 24),
-                Text('Last 7 Days',
+                Text('Last 7 calendar days',
                     style: tt.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary)),
@@ -99,15 +100,34 @@ class _MoodSummaryRow extends StatelessWidget {
         ? 0.0
         : last7.map((m) => m.score).reduce((a, b) => a + b) / last7.length;
     final totalEntries = moods.length;
+    final nearest = avgScore > 0
+        ? avgScore.round().clamp(1, 5).toInt()
+        : 3;
+    final moodColor =
+        avgScore > 0 ? _colorForScore(nearest) : AppColors.textTertiary;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           child: _SummaryCard(
             icon: Icons.trending_up_rounded,
             label: 'Avg Mood',
-            value: avgScore > 0 ? avgScore.toStringAsFixed(1) : '--',
-            color: _colorForScore(avgScore.round()),
+            color: moodColor,
+            value: avgScore > 0
+                ? _AvgMoodValue(
+                    emoji: MoodEmojis.scoreToEmoji[nearest] ?? '😐',
+                    label: MoodEmojis.scoreToLabel[nearest] ?? 'Okay',
+                    color: moodColor,
+                  )
+                : Text(
+                    '—',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
           ),
         ),
         const SizedBox(width: 12),
@@ -115,8 +135,15 @@ class _MoodSummaryRow extends StatelessWidget {
           child: _SummaryCard(
             icon: Icons.calendar_month_rounded,
             label: 'This Week',
-            value: '${last7.length}',
             color: AppColors.primary,
+            value: Text(
+              '${last7.length}',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -124,8 +151,15 @@ class _MoodSummaryRow extends StatelessWidget {
           child: _SummaryCard(
             icon: Icons.bar_chart_rounded,
             label: 'Total',
-            value: '$totalEntries',
             color: AppColors.secondary,
+            value: Text(
+              '$totalEntries',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.secondary,
+              ),
+            ),
           ),
         ),
       ],
@@ -143,15 +177,52 @@ class _MoodSummaryRow extends StatelessWidget {
   }
 }
 
+class _AvgMoodValue extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final Color color;
+
+  const _AvgMoodValue({
+    required this.emoji,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 30, height: 1.1)),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: color,
+            height: 1.1,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
 class _SummaryCard extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String value;
+  final Widget value;
   final Color color;
 
   const _SummaryCard({
-    required this.icon, required this.label,
-    required this.value, required this.color,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
   });
 
   @override
@@ -167,15 +238,38 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(
-              fontSize: 20, fontWeight: FontWeight.w700, color: color)),
+          value,
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(
-              fontSize: 11, color: AppColors.textTertiary)),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: AppColors.textTertiary),
+          ),
         ],
       ),
     );
   }
+}
+
+/// One bucket per calendar day (local), averaged if multiple logs that day.
+class _ChartDay {
+  final DateTime day;
+  final double? avgScore;
+  const _ChartDay({required this.day, this.avgScore});
+}
+
+List<_ChartDay> _last7CalendarDays(List<MoodModel> moods) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  return List.generate(7, (i) {
+    final day = today.subtract(Duration(days: 6 - i));
+    final dayMoods = moods.where((m) {
+      final md = m.date;
+      return DateTime(md.year, md.month, md.day) == day;
+    }).toList();
+    if (dayMoods.isEmpty) return _ChartDay(day: day, avgScore: null);
+    final sum = dayMoods.fold<double>(0, (a, m) => a + m.score);
+    return _ChartDay(day: day, avgScore: sum / dayMoods.length);
+  });
 }
 
 class _MoodChart extends StatelessWidget {
@@ -184,9 +278,10 @@ class _MoodChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final last7Days = moods.take(7).toList().reversed.toList();
+    final chartDays = _last7CalendarDays(moods);
+    final daysWithData = chartDays.where((d) => d.avgScore != null).length;
 
-    if (last7Days.length < 2) {
+    if (daysWithData < 1) {
       return Container(
         height: 180,
         decoration: BoxDecoration(
@@ -195,23 +290,34 @@ class _MoodChart extends StatelessWidget {
           border: Border.all(color: AppColors.surfaceVariant),
         ),
         child: Center(
-          child: Text('Need at least 2 entries to show a chart',
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              'No mood check-ins in the last 7 days',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+            ),
+          ),
         ),
       );
     }
 
+    final dateFmt = DateFormat('MMM d');
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 20, 20, 12),
+      padding: const EdgeInsets.fromLTRB(8, 20, 12, 8),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppColors.surfaceVariant),
       ),
       child: SizedBox(
-        height: 200,
-        child: LineChart(
-          LineChartData(
+        height: 220,
+        child: BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: 5.5,
+            minY: 0,
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
@@ -225,22 +331,24 @@ class _MoodChart extends StatelessWidget {
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
-                  reservedSize: 28,
+                  reservedSize: 34,
+                  interval: 1,
                   getTitlesWidget: (value, meta) {
-                    final index = value.toInt();
-                    if (index >= 0 && index < last7Days.length) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          DateFormat('E').format(last7Days[index].date),
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textTertiary),
-                        ),
-                      );
+                    final i = value.round();
+                    if (i < 0 || i >= 7 || (value - i).abs() > 0.01) {
+                      return const SizedBox.shrink();
                     }
-                    return const SizedBox();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        dateFmt.format(chartDays[i].day),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    );
                   },
                 ),
               ),
@@ -252,8 +360,11 @@ class _MoodChart extends StatelessWidget {
                   getTitlesWidget: (value, meta) {
                     const emojis = {1: '😢', 2: '😕', 3: '😐', 4: '🙂', 5: '😊'};
                     final emoji = emojis[value.toInt()];
-                    if (emoji == null) return const SizedBox();
-                    return Text(emoji, style: const TextStyle(fontSize: 14));
+                    if (emoji == null) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text(emoji, style: const TextStyle(fontSize: 14)),
+                    );
                   },
                 ),
               ),
@@ -261,66 +372,66 @@ class _MoodChart extends StatelessWidget {
               rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             ),
             borderData: FlBorderData(show: false),
-            minX: 0,
-            maxX: (last7Days.length - 1).toDouble(),
-            minY: 0.5,
-            maxY: 5.5,
-            lineTouchData: LineTouchData(
-              touchTooltipData: LineTouchTooltipData(
-                getTooltipItems: (spots) => spots.map((spot) {
-                  final mood = last7Days[spot.x.toInt()];
-                  return LineTooltipItem(
-                    '${mood.emoji} ${mood.label}\n${DateFormat('MMM d').format(mood.date)}',
+            barGroups: List.generate(7, (i) {
+              final d = chartDays[i];
+              final has = d.avgScore != null;
+              final score = d.avgScore?.clamp(1.0, 5.0);
+              final y = has ? score! : 0.45;
+              return BarChartGroupData(
+                x: i,
+                barsSpace: 6,
+                barRods: [
+                  BarChartRodData(
+                    toY: y,
+                    fromY: 0,
+                    width: 14,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+                    color: has
+                        ? _barColorForScore(d.avgScore!.round().clamp(1, 5))
+                        : AppColors.surfaceVariant,
+                    borderSide: has
+                        ? BorderSide.none
+                        : BorderSide(
+                            color: AppColors.textTertiary.withValues(alpha: 0.5),
+                          ),
+                  ),
+                ],
+              );
+            }),
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                  final i = group.x;
+                  if (i < 0 || i >= 7) return null;
+                  final d = chartDays[i];
+                  if (d.avgScore == null) {
+                    return BarTooltipItem(
+                      'No check-in\n${dateFmt.format(d.day)}',
+                      TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  }
+                  return BarTooltipItem(
+                    '${d.avgScore!.toStringAsFixed(1)} avg mood\n${dateFmt.format(d.day)}',
                     TextStyle(
                       color: Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   );
-                }).toList(),
+                },
               ),
             ),
-            lineBarsData: [
-              LineChartBarData(
-                spots: last7Days.asMap().entries.map((e) =>
-                    FlSpot(e.key.toDouble(), e.value.score.toDouble())).toList(),
-                isCurved: true,
-                curveSmoothness: 0.3,
-                color: AppColors.primary,
-                barWidth: 3,
-                isStrokeCapRound: true,
-                dotData: FlDotData(
-                  show: true,
-                  getDotPainter: (spot, percent, barData, index) {
-                    final score = spot.y.toInt();
-                    return FlDotCirclePainter(
-                      radius: 5,
-                      color: _colorForScore(score),
-                      strokeWidth: 2.5,
-                      strokeColor: AppColors.surface,
-                    );
-                  },
-                ),
-                belowBarData: BarAreaData(
-                  show: true,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.15),
-                      AppColors.primary.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),
     );
   }
 
-  Color _colorForScore(int score) {
+  Color _barColorForScore(int score) {
     switch (score) {
       case 5: return AppColors.moodExcellent;
       case 4: return AppColors.moodGood;

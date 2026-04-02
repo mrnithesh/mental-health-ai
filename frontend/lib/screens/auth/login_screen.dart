@@ -6,6 +6,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/nickname_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/common/loading_button.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -152,24 +153,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 48),
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: const Icon(
-                      Icons.spa_rounded,
-                      size: 36,
-                      color: AppColors.primary,
-                    ),
+                  // Horizontal brand header
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const AppLogo(size: 52, borderRadius: 16),
+                      const SizedBox(width: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'amigo',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryDark,
+                              letterSpacing: -0.5,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Your AI Companion',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textTertiary,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   const Text(
                     'Welcome Back',
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
                     ),

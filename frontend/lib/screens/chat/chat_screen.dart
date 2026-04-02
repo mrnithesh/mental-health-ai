@@ -10,6 +10,7 @@ import '../../config/theme.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
+import '../../widgets/app_logo.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 import '../main_shell.dart';
 
@@ -548,19 +549,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ],
 
           // Avatar
-          Container(
-            width: 38, height: 38,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [_P.teal, _P.tealDark],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 3))],
-            ),
-            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
-          ),
+          const AppLogo(size: 38, borderRadius: 12),
           const SizedBox(width: 10),
 
           // Name + online
@@ -967,19 +956,7 @@ class _AiAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size, height: size,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [_P.teal, _P.tealDark],
-        ),
-        borderRadius: BorderRadius.circular(size * 0.3),
-        boxShadow: const [BoxShadow(color: Color(0x201FB8A0), blurRadius: 6, offset: Offset(0, 2))],
-      ),
-      child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: size * 0.46),
-    );
+    return AppLogo(size: size, borderRadius: size * 0.3);
   }
 }
 

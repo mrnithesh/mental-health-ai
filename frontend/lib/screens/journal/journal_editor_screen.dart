@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/constants.dart';
 import '../../config/theme.dart';
 import '../../providers/journal_provider.dart';
+import '../../widgets/app_logo.dart';
 
 // ---------------------------------------------------------------------------
 // Route arguments
@@ -452,8 +453,7 @@ class _JournalEditorScreenState extends ConsumerState<JournalEditorScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.auto_awesome_rounded,
-                    size: 18, color: AppColors.secondary),
+                const AppLogoCircle(size: 18),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -614,8 +614,7 @@ class _MoodSuggestion extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.auto_awesome_rounded,
-              size: 16, color: AppColors.accent),
+          const AppLogoCircle(size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -860,8 +859,7 @@ class _InsightCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.auto_awesome_rounded,
-                      size: 16, color: AppColors.secondary),
+                  const AppLogoCircle(size: 16),
                   const SizedBox(width: 8),
                   Text(
                     'Amigo\'s Reflection',
@@ -1119,11 +1117,7 @@ class _AskNilaaButton extends StatelessWidget {
                 ),
               )
             else
-              Icon(
-                Icons.auto_awesome_rounded,
-                size: 14,
-                color: hasContent ? Colors.white : AppColors.textTertiary,
-              ),
+              const AppLogoCircle(size: 14),
             const SizedBox(width: 6),
             Text(
               isGenerating ? 'Reflecting...' : 'Ask Amigo',

@@ -15,6 +15,7 @@ import '../../config/theme.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
 import '../../utils/audio_output.dart';
+import '../../widgets/app_logo.dart';
 import '../journal/journal_editor_screen.dart' show JournalEditorArgs;
 import '../main_shell.dart';
 
@@ -674,8 +675,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                   ),
                 ),
               ] else ...[
-                Icon(Icons.auto_awesome_rounded,
-                    size: 32, color: AppColors.secondary),
+                const AppLogo(size: 48, borderRadius: 14),
                 const SizedBox(height: 12),
                 Text(
                   'That was a good conversation!',
@@ -995,16 +995,53 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
           Expanded(
             child: Column(
               children: [
-                Text(
-                  widget.journalMode ? 'Voice & Journal' : 'Voice Chat',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                  textAlign: TextAlign.center,
+                // Logo mark: mascot + "amigo" wordmark
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AppLogo(size: 34, borderRadius: 10),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'amigo',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.4,
+                            height: 1,
+                          ),
+                        ),
+                        if (widget.journalMode)
+                          Text(
+                            'Voice & Journal',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.2,
+                            ),
+                          )
+                        else
+                          Text(
+                            'Voice Chat',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
                 if (_state != VoiceState.idle)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 6),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
@@ -1022,7 +1059,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                         Text(
                           _formatDuration(_sessionDuration),
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             color: _timerColor,
                             fontWeight: FontWeight.w600,
                             fontFeatures: const [FontFeature.tabularFigures()],
@@ -1049,18 +1086,21 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
 
     return GestureDetector(
       onTap: _onMicTap,
-      child: SizedBox(
-        width: 200,
-        height: 200,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Wave circles when active
-            if (isActive) ...[
-              _buildWaveCircle(180, 0.08, 0),
-              _buildWaveCircle(160, 0.12, 0.25),
-              _buildWaveCircle(140, 0.15, 0.5),
-            ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 200,
+            height: 200,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Wave circles when active
+                if (isActive) ...[
+                  _buildWaveCircle(180, 0.08, 0),
+                  _buildWaveCircle(160, 0.12, 0.25),
+                  _buildWaveCircle(140, 0.15, 0.5),
+                ],
 
             // Breathing ring when idle
             if (isIdle)
@@ -1147,22 +1187,66 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                             strokeWidth: 2.5,
                           ),
                         )
-                      : Icon(
-                          _state == VoiceState.listening
-                              ? Icons.mic_rounded
-                              : _state == VoiceState.speaking
-                                  ? Icons.volume_up_rounded
-                                  : _state == VoiceState.error
-                                      ? Icons.refresh_rounded
-                                      : Icons.mic_none_rounded,
-                          color: Colors.white,
-                          size: 36,
-                        ),
+                      : _state == VoiceState.error
+                          ? const Icon(
+                              Icons.refresh_rounded,
+                              color: Colors.white,
+                              size: 36,
+                            )
+                          // Mascot fills the circle; mic indicator overlaid
+                          : ClipOval(
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+      // Mic state indicator pill below the button
+      if (!isIdle) ...[
+        const SizedBox(height: 10),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: (_state == VoiceState.listening
+                    ? AppColors.primary
+                    : AppColors.secondary)
+                .withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _state == VoiceState.listening
+                    ? Icons.mic_rounded
+                    : Icons.volume_up_rounded,
+                size: 14,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _state == VoiceState.listening
+                    ? 'Listening...'
+                    : 'Speaking...',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+        ],
       ),
     );
   }
@@ -1259,10 +1343,13 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.graphic_eq_rounded,
-                      color: Colors.white,
-                      size: 36,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                 );
@@ -1488,21 +1575,21 @@ class _TranscriptBubble extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: message.isUser
-                  ? AppColors.primary.withValues(alpha: 0.1)
-                  : AppColors.secondary.withValues(alpha: 0.1),
-            ),
-            child: Icon(
-              message.isUser ? Icons.person_rounded : Icons.auto_awesome_rounded,
-              size: 12,
-              color: message.isUser ? AppColors.primary : AppColors.secondary,
-            ),
-          ),
+          message.isUser
+              ? Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    size: 12,
+                    color: AppColors.primary,
+                  ),
+                )
+              : const AppLogoCircle(size: 22),
           const SizedBox(width: 8),
           Expanded(
             child: Column(

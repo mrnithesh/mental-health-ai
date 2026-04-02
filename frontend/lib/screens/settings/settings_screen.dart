@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/nickname_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/voice_provider.dart';
+import '../../widgets/user_avatar.dart';
 import '../../widgets/voice_picker.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -230,7 +231,6 @@ class _ProfileCard extends StatelessWidget {
     final displayName =
         nickname.isNotEmpty ? nickname : (user?.displayName ?? 'Friend');
     final email = user?.email ?? '';
-    final initials = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -241,18 +241,12 @@ class _ProfileCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryDark]),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Text(initials,
-                  style: const TextStyle(color: Colors.white, fontSize: 22,
-                      fontWeight: FontWeight.bold)),
-            ),
+          UserAvatar(
+            user: user,
+            displayName: nickname.isNotEmpty ? nickname : null,
+            size: 52,
+            borderColor: AppColors.primary.withValues(alpha: 0.25),
+            borderWidth: 2,
           ),
           const SizedBox(width: 16),
           Expanded(

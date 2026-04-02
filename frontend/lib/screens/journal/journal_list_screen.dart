@@ -9,6 +9,7 @@ import '../../models/journal_model.dart';
 import '../../providers/journal_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../widgets/animated_list_item.dart';
+import '../../widgets/app_logo.dart';
 import 'journal_editor_screen.dart' show JournalEditorArgs;
 
 class JournalListScreen extends ConsumerStatefulWidget {
@@ -602,8 +603,7 @@ class _JournalCard extends StatelessWidget {
                               journal.summary!.isNotEmpty)
                             Row(
                               children: [
-                                Icon(Icons.auto_awesome_rounded,
-                                    size: 11, color: AppColors.textTertiary),
+                                const AppLogoCircle(size: 11),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
@@ -664,19 +664,21 @@ class _JournalCard extends StatelessWidget {
                               const Spacer(),
                               if (journal.tags.contains('chat-journal'))
                                 _OriginBadge(
-                                  icon: Icons.chat_bubble_outline_rounded,
+                                  leading: Icon(Icons.chat_bubble_outline_rounded,
+                                      size: 11, color: AppColors.primary),
                                   label: 'From Chat',
                                   color: AppColors.primary,
                                 ),
                               if (journal.tags.contains('voice-journal'))
                                 _OriginBadge(
-                                  icon: Icons.mic_rounded,
+                                  leading: Icon(Icons.mic_rounded,
+                                      size: 11, color: AppColors.secondary),
                                   label: 'From Voice',
                                   color: AppColors.secondary,
                                 ),
                               if (journal.aiInsight != null)
                                 _OriginBadge(
-                                  icon: Icons.auto_awesome_rounded,
+                                  leading: const AppLogoCircle(size: 11),
                                   label: 'Insight',
                                   color: AppColors.secondary,
                                 ),
@@ -917,12 +919,12 @@ class _SheetOption extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _OriginBadge extends StatelessWidget {
-  final IconData icon;
+  final Widget leading;
   final String label;
   final Color color;
 
   const _OriginBadge({
-    required this.icon,
+    required this.leading,
     required this.label,
     required this.color,
   });
@@ -939,7 +941,7 @@ class _OriginBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: color),
+          leading,
           const SizedBox(width: 3),
           Text(
             label,
