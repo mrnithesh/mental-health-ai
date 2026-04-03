@@ -273,13 +273,23 @@ class FirestoreService {
 
   CollectionReference get _moodsCollection => _userDoc.collection('moods');
 
-  /// Get all moods
+  /// Get all moods. Returns an empty stream if the user is not authenticated.
   Stream<List<MoodModel>> getMoods() {
+    if (_uid == null) return Stream.value([]);
     return _moodsCollection
         .orderBy('date', descending: true)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => MoodModel.fromFirestore(doc)).toList());
+        .map((snapshot) {
+      final results = <MoodModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          results.add(MoodModel.fromFirestore(doc));
+        } catch (_) {
+          // Skip malformed documents rather than crashing the stream
+        }
+      }
+      return results;
+    });
   }
 
   /// Get moods for a date range

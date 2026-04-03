@@ -27,7 +27,7 @@ class MoodHistoryScreen extends ConsumerWidget {
       body: moodsAsync.when(
         loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.primary)),
-        error: (_, __) => Center(
+        error: (error, __) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -35,6 +35,21 @@ class MoodHistoryScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               Text('Could not load mood data',
                   style: TextStyle(color: AppColors.textSecondary)),
+              const SizedBox(height: 4),
+              Text(
+                error.toString().contains('permission')
+                    ? 'Permission denied — try signing out and back in'
+                    : 'Check your connection and try again',
+                style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              TextButton.icon(
+                onPressed: () => ref.refresh(moodsProvider),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+              ),
             ],
           ),
         ),
@@ -106,63 +121,65 @@ class _MoodSummaryRow extends StatelessWidget {
     final moodColor =
         avgScore > 0 ? _colorForScore(nearest) : AppColors.textTertiary;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _SummaryCard(
-            icon: Icons.trending_up_rounded,
-            label: 'Avg Mood',
-            color: moodColor,
-            value: avgScore > 0
-                ? _AvgMoodValue(
-                    emoji: MoodEmojis.scoreToEmoji[nearest] ?? '😐',
-                    label: MoodEmojis.scoreToLabel[nearest] ?? 'Okay',
-                    color: moodColor,
-                  )
-                : Text(
-                    '—',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textTertiary,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _SummaryCard(
+              icon: Icons.trending_up_rounded,
+              label: 'Avg Mood',
+              color: moodColor,
+              value: avgScore > 0
+                  ? _AvgMoodValue(
+                      emoji: MoodEmojis.scoreToEmoji[nearest] ?? '😐',
+                      label: MoodEmojis.scoreToLabel[nearest] ?? 'Okay',
+                      color: moodColor,
+                    )
+                  : Text(
+                      '—',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textTertiary,
+                      ),
                     ),
-                  ),
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            icon: Icons.calendar_month_rounded,
-            label: 'This Week',
-            color: AppColors.primary,
-            value: Text(
-              '${last7.length}',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+          const SizedBox(width: 12),
+          Expanded(
+            child: _SummaryCard(
+              icon: Icons.calendar_month_rounded,
+              label: 'This Week',
+              color: AppColors.primary,
+              value: Text(
+                '${last7.length}',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            icon: Icons.bar_chart_rounded,
-            label: 'Total',
-            color: AppColors.secondary,
-            value: Text(
-              '$totalEntries',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.secondary,
+          const SizedBox(width: 12),
+          Expanded(
+            child: _SummaryCard(
+              icon: Icons.bar_chart_rounded,
+              label: 'Total',
+              color: AppColors.secondary,
+              value: Text(
+                '$totalEntries',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.secondary,
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

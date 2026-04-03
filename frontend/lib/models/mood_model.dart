@@ -18,13 +18,19 @@ class MoodModel {
   });
 
   factory MoodModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = (doc.data() as Map<String, dynamic>?) ?? {};
+    final rawDate = data['date'];
+    final date = rawDate is Timestamp
+        ? rawDate.toDate()
+        : DateTime.now(); // fallback — bad doc still shows rather than crashing
+    final rawScore = data['score'];
+    final score = (rawScore is int) ? rawScore.clamp(1, 5) : 3;
     return MoodModel(
       id: doc.id,
-      date: (data['date'] as Timestamp).toDate(),
-      score: data['score'] ?? 3,
-      emoji: data['emoji'] ?? '😐',
-      note: data['note'],
+      date: date,
+      score: score,
+      emoji: data['emoji'] as String? ?? '😐',
+      note: data['note'] as String?,
     );
   }
 

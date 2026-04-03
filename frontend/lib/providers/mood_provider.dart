@@ -2,18 +2,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/mood_model.dart';
 import '../services/firestore_service.dart';
+import 'auth_provider.dart';
 import 'service_providers.dart';
 
-/// Stream of all moods
+/// Stream of all moods — only subscribes once auth is confirmed so we never
+/// hit Firestore before the auth token is attached (avoids PERMISSION_DENIED).
 final moodsProvider = StreamProvider<List<MoodModel>>((ref) {
+  final authAsync = ref.watch(authStateProvider);
+  // Wait until we have a confirmed, non-null user before opening Firestore.
+  final user = authAsync.valueOrNull;
+  if (user == null) return const Stream.empty();
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.getMoods();
 });
 
-/// Today's mood provider
+/// Today's mood provider — invalidates on auth change.
 final todaysMoodProvider = FutureProvider<MoodModel?>((ref) async {
+  final authAsync = ref.watch(authStateProvider);
+  if (authAsync.valueOrNull == null) return null;
   final firestoreService = ref.watch(firestoreServiceProvider);
-  return firestoreService.getTodaysMood();
+  try {
+    return firestoreService.getTodaysMood();
+  } catch (_) {
+    return null;
+  }
 });
 
 /// Mood tracker state
